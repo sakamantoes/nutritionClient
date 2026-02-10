@@ -1,3 +1,4 @@
+// src/utils/api.js
 import axios from "axios";
 import toast from "react-hot-toast";
 
@@ -10,6 +11,7 @@ const api = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
+  timeout: 10000, // 10 second timeout
 });
 
 // Python Flask API instance
@@ -18,29 +20,54 @@ const pythonApi = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
+  timeout: 10000,
 });
 
-// Auth interceptor for Node.js API
+// Request interceptor for logging
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
-    if (token) config.headers.Authorization = `Bearer ${token}`;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, config.params || '');
     return config;
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    console.error('Request error:', error);
+    return Promise.reject(error);
+  }
 );
 
 // Response interceptor for Node.js API
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`API Response: ${response.status} ${response.config.url}`, response.data);
+    return response;
+  },
   (error) => {
+    console.error('API Error:', {
+      url: error.config?.url,
+      method: error.config?.method,
+      status: error.response?.status,
+      message: error.message,
+      response: error.response?.data
+    });
+    
     const message = error.response?.data?.error || error.message || "Something went wrong";
-    if (error.response?.status !== 401) toast.error(message);
+    
+    // Don't show toast for auth errors
+    if (error.response?.status !== 401) {
+      toast.error(message);
+    }
+    
+    // Handle 401 unauthorized
     if (error.response?.status === 401) {
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       window.location.href = "/login";
     }
+    
     return Promise.reject(error);
   }
 );
@@ -49,6 +76,7 @@ api.interceptors.response.use(
 pythonApi.interceptors.response.use(
   (response) => response,
   (error) => {
+    console.error('Python API Error:', error);
     const message = error.response?.data?.error || error.message || "ML service unavailable";
     if (error.response?.status !== 401) toast.error(message);
     return Promise.reject(error);
@@ -63,32 +91,94 @@ export const authApi = {
   updateProfile: (userId, data) => api.put(`/users/profile/${userId}`, data),
   getDailySummary: (userId, date) =>
     api.get(`/users/summary/${userId}`, { params: { date } }),
-
-  getWeeklyNutrition: (userId, weeks) => 
-    api.get(`/users/nutrition/weekly/${userId}`, { params: { weeks } }),
 };
 
-// Food API (Node.js)
+// Food API (Node.js) - FIXED VERSION
 export const foodApi = {
-    logFood: (data) => api.post('/foods/log', data),
-  getFoodHistory: (userId, params) => 
-    api.get(`/foods/history/${userId}`, { params })
-    .then(response => {
-      // Ensure consistent response format
-      if (Array.isArray(response.data)) {
+  logFood: (data) => {
+    console.log('Logging food:', data);
+    return api.post('/foods/log', data);
+  },
+  
+  getFoodHistory: (userId, params = {}) => {
+    console.log('Fetching food history for user:', userId, 'Params:', params);
+    return api.get(`/foods/history/${userId}`, { 
+      params,
+      // Add timestamp to prevent caching issues
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        'Expires': '0'
+      }
+    }).then(response => {
+      console.log('Food history response:', response.data);
+      
+      // Ensure consistent data structure
+      const data = response.data;
+      
+      // If response is just an array, wrap it in proper structure
+      if (Array.isArray(data)) {
         return {
-          foodLogs: response.data,
-          count: response.data.length
+          foodLogs: data,
+          count: data.length,
+          success: true
         };
       }
-      return response.data;
-    }),
-  getNutritionDataset: (params) =>
-    api.get("/foods/dataset", { params }),
-  deleteFoodLog: (logId) => api.delete(`/foods/log/${logId}`),
+      
+      // If response has foodLogs property, ensure it's an array
+      if (data && data.foodLogs && !Array.isArray(data.foodLogs)) {
+        data.foodLogs = [];
+      }
+      
+      // If no foodLogs property, create it
+      if (!data.foodLogs) {
+        data.foodLogs = [];
+      }
+      
+      // Ensure count is set
+      if (!data.count && Array.isArray(data.foodLogs)) {
+        data.count = data.foodLogs.length;
+      }
+      
+      return data;
+    }).catch(error => {
+      console.error('Food history API error:', error);
+      // Return empty structure on error to prevent UI breakage
+      return {
+        foodLogs: [],
+        count: 0,
+        error: error.message
+      };
+    });
+  },
+  
+  searchFoods: (query) => {
+    console.log('Searching foods with query:', query);
+    return api.get('/foods/search', { 
+      params: { query },
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      }
+    }).then(response => {
+      console.log('Search API response:', response.data);
+      return response;
+    }).catch(error => {
+      console.error('Search API error:', error);
+      throw error;
+    });
+  },
+  
+  getNutritionDataset: (params) => 
+    api.get('/foods/dataset', { params }),
+  
+  deleteFoodLog: (logId) => {
+    console.log('Deleting food log:', logId);
+    return api.delete(`/foods/log/${logId}`);
+  },
 };
 
-// src/utils/api.js - Add to exerciseApi object
+// Exercise API (Node.js)
 export const exerciseApi = {
   logExercise: (data) => api.post('/exercises/log', data),
   getRecommendations: (userId) => 
@@ -106,35 +196,27 @@ export const chatbotApi = {
 
 // Machine Learning API (Python Flask)
 export const mlApi = {
-  // Predict food group from nutrition data
   predictFoodGroup: (nutritionData) => 
     pythonApi.post("/predict/food-group", nutritionData),
   
-  // Predict health score from nutrition data
   predictHealthScore: (nutritionData) => 
     pythonApi.post("/predict/health-score", nutritionData),
   
-  // Get AI exercise recommendations
   getExerciseRecommendations: (userData) => 
     pythonApi.post("/exercise/recommend", userData),
   
-  // Analyze nutrition data
   analyzeNutrition: (mealData) => 
     pythonApi.post("/nutrition/analyze", mealData),
   
-  // Get chatbot response from Python AI
   chatbotResponse: (messageData) => 
     pythonApi.post("/chatbot/response", messageData),
   
-  // Get nutrition insights and recommendations
   getNutritionInsights: (userData) => 
     pythonApi.post("/insights/nutrition", userData),
   
-  // Generate meal plan
   generateMealPlan: (userPreferences) => 
     pythonApi.post("/meal-plan/generate", userPreferences),
   
-  // Analyze food image (if you have image recognition)
   analyzeFoodImage: (imageData) => 
     pythonApi.post("/analyze/image", imageData, {
       headers: {

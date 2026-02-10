@@ -165,8 +165,8 @@ const FoodSearch = ({ onClose, onSelect }) => {
                 onClick={() => setFoodGroup(group.id)}
                 className={`px-3 py-1.5 rounded-full text-sm whitespace-nowrap transition-all duration-200 ${
                   foodGroup === group.id
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-indigo-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                 }`}
               >
                 {group.label}
@@ -293,7 +293,7 @@ const FoodSearch = ({ onClose, onSelect }) => {
               <p className="text-gray-600 dark:text-gray-400 mb-6">
                 Enter a food name to search our nutrition database
               </p>
-              <div className="grid grid-cols-2 gap-3 max-w-sm mx-auto">
+              <div className="grid grid-cols-4 gap-3 max-w-sm mx-auto">
                 <Button
                   variant="outline"
                   onClick={() => setQuery('apple')}
@@ -327,18 +327,7 @@ const FoodSearch = ({ onClose, onSelect }) => {
           )}
         </div>
 
-        {/* Debug info (remove in production) */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="p-4 bg-gray-100 dark:bg-gray-900 text-xs">
-            <p>Debug Info:</p>
-            <p>Query: "{query}"</p>
-            <p>Debounced Query: "{debouncedQuery}"</p>
-            <p>Is Loading: {isLoading.toString()}</p>
-            <p>Is Error: {isError.toString()}</p>
-            <p>Results Count: {results.length}</p>
-            <p>Selected Group: {foodGroup}</p>
-          </div>
-        )}
+        
       </motion.div>
     </motion.div>
   );

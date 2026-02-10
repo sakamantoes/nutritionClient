@@ -1,4 +1,4 @@
-// Update src/components/food/MealCard.jsx
+// src/components/food/MealCard.jsx (Updated)
 import React from 'react';
 import { motion } from 'framer-motion';
 import { 
@@ -9,12 +9,12 @@ import {
   Apple,
   Coffee,
   Sandwich,
-  Utensils
+  Utensils,
+  CheckCircle
 } from 'lucide-react';
 import { format } from 'date-fns';
 
 const MealCard = ({ food, onEdit, onDelete }) => {
-  // Handle missing data gracefully
   const getMealIcon = (mealType) => {
     switch (mealType?.toLowerCase()) {
       case 'breakfast':
@@ -42,34 +42,32 @@ const MealCard = ({ food, onEdit, onDelete }) => {
   };
 
   const formatTime = (timestamp) => {
-    if (!timestamp) return 'Just now';
+    if (!timestamp) return '';
     try {
       return format(new Date(timestamp), 'h:mm a');
     } catch {
-      return 'Invalid time';
+      return '';
     }
   };
 
   const formatDate = (timestamp) => {
-    if (!timestamp) return 'Today';
+    if (!timestamp) return '';
     try {
       return format(new Date(timestamp), 'MMM d, yyyy');
     } catch {
-      return 'Today';
+      return '';
     }
   };
 
-  // Default values for missing data
-  const foodData = {
-    foodName: food?.foodName || food?.food_name || 'Unknown Food',
-    mealType: food?.mealType || 'snack',
-    timestamp: food?.timestamp || new Date().toISOString(),
-    calories: food?.calories || food?.energy_kcal || 0,
-    protein: food?.protein || food?.protein_g || 0,
-    carbs: food?.carbs || food?.carbohydrates_g || 0,
-    fat: food?.fat || food?.total_fat_g || 0,
-    servingSize: food?.servingSize || food?.serving_size_g || 0,
-    foodGroup: food?.foodGroup || food?.food_group || 'unknown',
+  const isToday = (timestamp) => {
+    if (!timestamp) return false;
+    try {
+      const today = new Date();
+      const date = new Date(timestamp);
+      return today.toDateString() === date.toDateString();
+    } catch {
+      return false;
+    }
   };
 
   return (
@@ -81,28 +79,45 @@ const MealCard = ({ food, onEdit, onDelete }) => {
     >
       <div className="flex items-start justify-between">
         <div className="flex items-start space-x-4">
-          <div className={`p-3 rounded-lg ${getMealColor(foodData.mealType).split(' ')[0]}`}>
-            {getMealIcon(foodData.mealType)}
+          <div className={`p-3 rounded-lg ${getMealColor(food.mealType).split(' ')[0]}`}>
+            {getMealIcon(food.mealType)}
           </div>
           
           <div className="flex-1">
-            <div className="flex items-center space-x-3 mb-2">
-              <h4 className="font-semibold text-gray-900 dark:text-white">
-                {foodData.foodName}
-              </h4>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getMealColor(foodData.mealType)}`}>
-                {foodData.mealType}
-              </span>
+            <div className="flex items-start justify-between mb-2">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <h4 className="font-semibold text-gray-900 dark:text-white">
+                    {food.foodName || 'Unnamed Food'}
+                  </h4>
+                  {isToday(food.timestamp) && (
+                    <span className="flex items-center text-xs text-success">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Today
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center space-x-2 mt-1">
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getMealColor(food.mealType)}`}>
+                    {food.mealType || 'meal'}
+                  </span>
+                  {food.foodGroup && (
+                    <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800 dark:bg-primary-900 dark:text-primary-100">
+                      {food.foodGroup}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
             
             <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400 mb-3">
               <div className="flex items-center">
                 <Clock className="h-3 w-3 mr-1" />
-                {formatTime(foodData.timestamp)} • {formatDate(foodData.timestamp)}
+                {formatTime(food.timestamp)} • {formatDate(food.timestamp)}
               </div>
               <div className="flex items-center font-medium text-gray-700 dark:text-gray-300">
                 <Flame className="h-3 w-3 mr-1 text-orange-500" />
-                {foodData.calories} cal
+                {food.calories || 0} cal
               </div>
             </div>
             
@@ -110,45 +125,38 @@ const MealCard = ({ food, onEdit, onDelete }) => {
               <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
                 <p className="text-xs text-gray-500 dark:text-gray-400">Protein</p>
                 <p className="font-medium text-gray-900 dark:text-white">
-                  {foodData.protein}g
+                  {food.protein || 0}g
                 </p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
                 <p className="text-xs text-gray-500 dark:text-gray-400">Carbs</p>
                 <p className="font-medium text-gray-900 dark:text-white">
-                  {foodData.carbs}g
+                  {food.carbs || 0}g
                 </p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
                 <p className="text-xs text-gray-500 dark:text-gray-400">Fat</p>
                 <p className="font-medium text-gray-900 dark:text-white">
-                  {foodData.fat}g
+                  {food.fat || 0}g
                 </p>
               </div>
               <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-2">
                 <p className="text-xs text-gray-500 dark:text-gray-400">Serving</p>
                 <p className="font-medium text-gray-900 dark:text-white">
-                  {foodData.servingSize}g
+                  {food.servingSize || food.servingSize || 0}g
                 </p>
               </div>
             </div>
-            
-            {foodData.foodGroup && foodData.foodGroup !== 'unknown' && (
-              <div className="mt-3">
-                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800 dark:bg-primary-900 dark:text-primary-100">
-                  {foodData.foodGroup}
-                </span>
-              </div>
-            )}
           </div>
         </div>
         
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-col items-center space-y-2 ml-4">
           {onEdit && (
             <button
               onClick={onEdit}
               className="p-2 text-gray-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
               aria-label="Edit"
+              title="Edit food"
             >
               <Edit2 className="h-4 w-4" />
             </button>
@@ -158,6 +166,7 @@ const MealCard = ({ food, onEdit, onDelete }) => {
               onClick={onDelete}
               className="p-2 text-gray-500 hover:text-danger hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
               aria-label="Delete"
+              title="Delete food"
             >
               <Trash2 className="h-4 w-4" />
             </button>
