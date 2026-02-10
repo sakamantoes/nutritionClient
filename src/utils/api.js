@@ -225,34 +225,24 @@ export const chatbotApi = {
 };
 
 // Machine Learning API (Python Flask)
+// Analysis API
+export const analysisApi = {
+  analyzeNutrition: (data) => api.post('/analysis/analyze', data),
+  getNutritionInsights: (data) => api.post('/analysis/insights', data),
+  getNutritionTrends: (userId, params) => 
+    api.get(`/analysis/trends/${userId}`, { params }),
+};
+
+// Python API should only have endpoints that actually exist
 export const mlApi = {
-  predictFoodGroup: (nutritionData) => 
-    pythonApi.post("/predict/food-group", nutritionData),
-  
-  predictHealthScore: (nutritionData) => 
-    pythonApi.post("/predict/health-score", nutritionData),
-  
-  getExerciseRecommendations: (userData) => 
-    pythonApi.post("/exercise/recommend", userData),
-  
+  predictFoodGroup: (data) => pythonApi.post('/predict/food-group', data),
+  predictHealthScore: (data) => pythonApi.post('/predict/health-score', data),
+  getExerciseRecommendations: (data) => 
+    pythonApi.post('/exercise/recommend', data),
   analyzeNutrition: (mealData) => 
-    pythonApi.post("/nutrition/analyze", mealData),
-  
+    pythonApi.post('/nutrition/analyze', mealData),
   chatbotResponse: (messageData) => 
-    pythonApi.post("/chatbot/response", messageData),
-  
-  getNutritionInsights: (userData) => 
-    pythonApi.post("/insights/nutrition", userData),
-  
-  generateMealPlan: (userPreferences) => 
-    pythonApi.post("/meal-plan/generate", userPreferences),
-  
-  analyzeFoodImage: (imageData) => 
-    pythonApi.post("/analyze/image", imageData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    }),
+    pythonApi.post('/chatbot/response', messageData),
 };
 
 export default api;
