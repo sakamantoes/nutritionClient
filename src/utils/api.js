@@ -191,7 +191,7 @@ export const exerciseApi = {
     return api.get(`/exercises/history/${userId}`, { params })
       .then(response => {
         console.log('Exercise history response:', response.data);
-        return response;
+        return response.data;
       })
       .catch(error => {
         console.error('Error fetching exercise history:', error);
