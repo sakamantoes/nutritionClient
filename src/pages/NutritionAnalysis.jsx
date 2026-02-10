@@ -388,15 +388,15 @@ const NutritionAnalysis = () => {
               </p>
               <div className="mt-4 flex items-center space-x-4">
                 <div className="flex items-center">
-                  <div className="h-3 w-3 rounded-full bg-success mr-2"></div>
+                  <div className="h-3 w-3 rounded-full bg-green-500 mr-2"></div>
                   <span className="text-sm">Excellent (8-10)</span>
                 </div>
                 <div className="flex items-center">
-                  <div className="h-3 w-3 rounded-full bg-warning mr-2"></div>
+                  <div className="h-3 w-3 rounded-full bg-orange-500 mr-2"></div>
                   <span className="text-sm">Good (6-7.9)</span>
                 </div>
                 <div className="flex items-center">
-                  <div className="h-3 w-3 rounded-full bg-danger mr-2"></div>
+                  <div className="h-3 w-3 rounded-full bg-red-500 mr-2"></div>
                   <span className="text-sm">Needs Improvement (0-5.9)</span>
                 </div>
               </div>
