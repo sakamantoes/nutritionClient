@@ -12,11 +12,12 @@ import {
   Dumbbell,
   AlertCircle,
   Droplets,
+  RefreshCw,
 } from "lucide-react";
 import { useQuery } from "react-query";
 import { useAuth } from "../hooks/useAuth";
 import { authApi, foodApi, exerciseApi, mlApi } from "../utils/api";
-import { format, startOfDay, endOfDay, subDays } from "date-fns";
+import { format } from "date-fns";
 
 // Components
 import DailySummary from "../components/dashboard/DailySummary";
@@ -43,7 +44,8 @@ const Dashboard = () => {
   const { 
     data: todayFoods, 
     isLoading: foodsLoading,
-    refetch: refetchFoods 
+    refetch: refetchFoods,
+    isRefetching: isRefetchingFoods
   } = useQuery(
     ["todayFoods", user?.id, today],
     () => foodApi.getFoodHistory(user?.id, {
@@ -59,11 +61,12 @@ const Dashboard = () => {
     }
   );
 
-  // Fetch today's exercises
+  // Fetch today's exercises - FIXED: Access response.data correctly
   const { 
     data: todayExercises, 
     isLoading: exercisesLoading,
-    refetch: refetchExercises 
+    refetch: refetchExercises,
+    isRefetching: isRefetchingExercises
   } = useQuery(
     ["todayExercises", user?.id, today],
     () => exerciseApi.getExerciseHistory(user?.id, {
@@ -107,8 +110,11 @@ const Dashboard = () => {
   }, [todayFoods]);
 
   useEffect(() => {
-    if (todayExercises?.exerciseLogs) {
-      const totalExerciseMinutes = todayExercises.exerciseLogs.reduce(
+    // FIXED: Check if todayExercises has data property (full response) or is already the data
+    const exerciseData = todayExercises?.data ? todayExercises.data : todayExercises;
+    
+    if (exerciseData?.exerciseLogs) {
+      const totalExerciseMinutes = exerciseData.exerciseLogs.reduce(
         (acc, exercise) => acc + (exercise.duration || 0),
         0
       );
@@ -226,8 +232,9 @@ const Dashboard = () => {
     foodData: food,
   })) || [];
 
-  // Process today's exercises for display
-  const processedExercises = todayExercises?.exerciseLogs?.map(exercise => ({
+  // FIXED: Process today's exercises for display - handle both response formats
+  const exerciseData = todayExercises?.data ? todayExercises.data : todayExercises;
+  const processedExercises = exerciseData?.exerciseLogs?.map(exercise => ({
     name: exercise.exerciseName,
     type: exercise.exerciseType,
     duration: exercise.duration,
@@ -287,6 +294,9 @@ const Dashboard = () => {
     refetchExercises();
   };
 
+  // Check if data is being refetched
+  const isRefreshing = isRefetchingFoods || isRefetchingExercises;
+
   // Loading state
   if (foodsLoading || exercisesLoading) {
     return (
@@ -326,8 +336,24 @@ const Dashboard = () => {
               </div>
             </div>
             <div className="mt-4 md:mt-0 flex flex-col gap-2">
-              <Button variant="white" size="lg" className="font-semibold" onClick={handleRefresh}>
-                Refresh Data
+              <Button 
+                variant="white" 
+                size="lg" 
+                className="font-semibold" 
+                onClick={handleRefresh}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <>
+                    <RefreshCw className="mr-2 h-5 w-5 animate-spin" />
+                    Refreshing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-5 w-5" />
+                    Refresh Data
+                  </>
+                )}
               </Button>
               <Button variant="outline-white" size="sm" className="font-semibold">
                 View Weekly Report
@@ -390,25 +416,7 @@ const Dashboard = () => {
       </motion.div>
 
       {/* Debug Info */}
-      {process.env.NODE_ENV === 'development' && (
-        <motion.div variants={itemVariants}>
-          <Card className="p-4 bg-yellow-50 dark:bg-yellow-900/20">
-            <div className="flex items-center">
-              <AlertCircle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 mr-2" />
-              <div>
-                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-300">
-                  Debug Info
-                </p>
-                <p className="text-xs text-yellow-600 dark:text-yellow-400">
-                  Foods: {todayFoods?.foodLogs?.length || 0} items • 
-                  Exercises: {todayExercises?.exerciseLogs?.length || 0} activities • 
-                  User ID: {user?.id}
-                </p>
-              </div>
-            </div>
-          </Card>
-        </motion.div>
-      )}
+     
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -497,7 +505,7 @@ const Dashboard = () => {
             <DailySummary data={dailySummary} />
           </motion.div>
 
-          {/* Exercise Today */}
+          {/* Exercise Today - FIXED: Updated to use processedExercises */}
           <motion.div variants={itemVariants}>
             <Card className="p-6">
               <div className="flex items-center justify-between mb-6">
