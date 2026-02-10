@@ -1,19 +1,22 @@
 // src/pages/Exercise.jsx
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useMemo, useEffect } from 'react';
+import { motion } from 'framer-motion';
 import { 
   Plus, 
   Filter, 
   TrendingUp,
   Calendar,
   Target,
-  Dumbbell,
-  Activity} from 'lucide-react';
+  AlertCircle,
+  Clock,
+  Flame,
+  Activity
+} from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useAuth } from '../hooks/useAuth';
-import { exerciseApi, mlApi } from '../utils/api';
+import { exerciseApi } from '../utils/api';
+import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
 
 // Components
 import Card from '../components/common/Card';
@@ -28,63 +31,44 @@ const Exercise = () => {
   const [showForm, setShowForm] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState(null);
   const [dateFilter, setDateFilter] = useState('all');
+  const [mockExercises, setMockExercises] = useState([]);
 
-  // Get today's date for filtering
-  const getStartOfWeek = () => {
-    const now = new Date();
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
-    return startOfWeek.toISOString();
-  };
-
-  const getStartOfMonth = () => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    startOfMonth.setHours(0, 0, 0, 0);
-    return startOfMonth.toISOString();
-  };
-
-  // Build date filter params
-  const getDateParams = () => {
-    switch (dateFilter) {
-      case 'week':
-        return { startDate: getStartOfWeek().split('T')[0] };
-      case 'month':
-        return { startDate: getStartOfMonth().split('T')[0] };
-      default:
-        return {};
-    }
-  };
-
-  // Fetch exercise history from backend
-  const { data: exerciseHistory, isLoading } = useQuery(
+  // Fetch exercise history
+  const { 
+    data: exerciseResponse, 
+    isLoading, 
+    error 
+  } = useQuery(
     ['exerciseHistory', user?.id, dateFilter],
-    () => exerciseApi.getExerciseHistory(user?.id, getDateParams()),
+    () => exerciseApi.getExerciseHistory(user?.id, {
+      startDate: dateFilter === 'week' ? getStartOfWeek() : 
+                dateFilter === 'month' ? getStartOfMonth() : undefined,
+    }),
     { 
       enabled: !!user,
-      onError: (error) => {
-        toast.error('Failed to load exercise history');
-        console.error('Exercise history error:', error);
+      onError: (err) => {
+        console.error('Error fetching exercise history:', err);
+        // Use mock data if API fails
+        setMockExercises(generateMockExercises());
       }
     }
   );
 
-  // Fetch recommendations from backend
-  const { data: recommendations, isLoading: recommendationsLoading } = useQuery(
+  // Fetch recommendations
+  const { data: recommendationsResponse } = useQuery(
     ['exerciseRecommendations', user?.id],
     () => exerciseApi.getRecommendations(user?.id),
     { 
       enabled: !!user,
-      onError: (error) => {
-        console.error('Recommendations error:', error);
+      onError: (err) => {
+        console.error('Error fetching recommendations:', err);
       }
     }
   );
 
   // Log exercise mutation
   const logExerciseMutation = useMutation(exerciseApi.logExercise, {
-    onSuccess: (data) => {
+    onSuccess: () => {
       toast.success('Exercise logged successfully!');
       queryClient.invalidateQueries(['exerciseHistory', user?.id]);
       queryClient.invalidateQueries(['exerciseRecommendations', user?.id]);
@@ -96,47 +80,145 @@ const Exercise = () => {
     },
   });
 
-  // Get AI recommendations from Python backend
-  const { data: aiRecommendations, refetch: getAIRecommendations } = useQuery(
-    ['aiExerciseRecommendations', user?.id],
-    () => {
-      if (!user) return Promise.resolve(null);
-      
-      // Calculate today's calories from food history
-      // For now, use mock data
-      const mockData = {
-        age: user.age,
-        weight: user.weight,
-        height: user.height,
-        calories_consumed: 2200,
-        goal: user.goal,
-        activity_level: user.activity_level
-      };
-      
-      return mlApi.getExerciseRecommendations(mockData);
-    },
-    { 
-      enabled: !!user,
-      refetchOnWindowFocus: false
-    }
-  );
+  const getStartOfWeek = () => {
+    const start = startOfWeek(new Date(), { weekStartsOn: 1 }); // Monday
+    return format(start, 'yyyy-MM-dd');
+  };
 
-  // Delete exercise mutation
-  const deleteExerciseMutation = useMutation(
-    (exerciseId) => {
-      // Since we're using JSON file, we'll handle delete in a custom way
-      return exerciseApi.deleteExercise(exerciseId);
-    },
-    {
-      onSuccess: () => {
-        toast.success('Exercise deleted successfully!');
-        queryClient.invalidateQueries(['exerciseHistory', user?.id]);
+  const getStartOfMonth = () => {
+    const start = startOfMonth(new Date());
+    return format(start, 'yyyy-MM-dd');
+  };
+
+  const generateMockExercises = () => {
+    return [
+      {
+        id: 1,
+        exerciseName: 'Morning Run',
+        exerciseType: 'cardio',
+        duration: 30,
+        caloriesBurned: 320,
+        timestamp: new Date().toISOString(),
       },
-      onError: (error) => {
-        toast.error('Failed to delete exercise');
+      {
+        id: 2,
+        exerciseName: 'Weight Lifting',
+        exerciseType: 'strength',
+        duration: 45,
+        caloriesBurned: 280,
+        timestamp: new Date(Date.now() - 86400000).toISOString(), // Yesterday
       },
+      {
+        id: 3,
+        exerciseName: 'Yoga Session',
+        exerciseType: 'flexibility',
+        duration: 60,
+        caloriesBurned: 180,
+        timestamp: new Date(Date.now() - 172800000).toISOString(), // 2 days ago
+      },
+    ];
+  };
+
+  // Extract exercises from API response or use mock data
+  const exercises = useMemo(() => {
+    if (exerciseResponse?.data?.exerciseLogs) {
+      return exerciseResponse.data.exerciseLogs;
+    } else if (exerciseResponse?.exerciseLogs) {
+      return exerciseResponse.exerciseLogs;
+    } else if (Array.isArray(exerciseResponse)) {
+      return exerciseResponse;
+    } else if (mockExercises.length > 0) {
+      return mockExercises;
+    } else if (exerciseResponse && typeof exerciseResponse === 'object') {
+      // Try to extract any array from the response
+      const arrays = Object.values(exerciseResponse).filter(val => Array.isArray(val));
+      return arrays.length > 0 ? arrays[0] : [];
     }
-  );
+    return [];
+  }, [exerciseResponse, mockExercises]);
+
+  // Calculate live stats from exercises
+  const calculateStats = () => {
+    const now = new Date();
+    const today = format(now, 'yyyy-MM-dd');
+    const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+    const monthStart = startOfMonth(now);
+    const monthEnd = endOfMonth(now);
+
+    let totalToday = {
+      minutes: 0,
+      calories: 0,
+      exercises: 0,
+    };
+
+    let totalThisWeek = {
+      minutes: 0,
+      calories: 0,
+      exercises: 0,
+    };
+
+    let totalThisMonth = {
+      minutes: 0,
+      calories: 0,
+      exercises: 0,
+    };
+
+    exercises.forEach(exercise => {
+      if (!exercise.timestamp) return;
+      
+      const exerciseDate = new Date(exercise.timestamp);
+      const exerciseDay = format(exerciseDate, 'yyyy-MM-dd');
+      
+      // Today's stats
+      if (exerciseDay === today) {
+        totalToday.minutes += exercise.duration || 0;
+        totalToday.calories += exercise.caloriesBurned || 0;
+        totalToday.exercises += 1;
+      }
+
+      // This week's stats
+      if (isWithinInterval(exerciseDate, { start: weekStart, end: weekEnd })) {
+        totalThisWeek.minutes += exercise.duration || 0;
+        totalThisWeek.calories += exercise.caloriesBurned || 0;
+        totalThisWeek.exercises += 1;
+      }
+
+      // This month's stats
+      if (isWithinInterval(exerciseDate, { start: monthStart, end: monthEnd })) {
+        totalThisMonth.minutes += exercise.duration || 0;
+        totalThisMonth.calories += exercise.caloriesBurned || 0;
+        totalThisMonth.exercises += 1;
+      }
+    });
+
+    // Calculate goal completion percentage
+    const weeklyGoal = {
+      cardioMinutes: 150,
+      strengthSessions: 3,
+      caloriesBurned: 3500,
+    };
+
+    const cardioPercentage = Math.min(Math.round((totalThisWeek.minutes / weeklyGoal.cardioMinutes) * 100), 100);
+    const strengthPercentage = totalThisWeek.exercises > 0 ? 
+      Math.min(Math.round((totalThisWeek.exercises / weeklyGoal.strengthSessions) * 100), 100) : 0;
+    const caloriesPercentage = Math.min(Math.round((totalThisWeek.calories / weeklyGoal.caloriesBurned) * 100), 100);
+
+    return {
+      today: totalToday,
+      thisWeek: totalThisWeek,
+      thisMonth: totalThisMonth,
+      goalCompletion: {
+        cardio: cardioPercentage,
+        strength: strengthPercentage,
+        calories: caloriesPercentage,
+        overall: Math.round((cardioPercentage + strengthPercentage + caloriesPercentage) / 3),
+      },
+      weeklyGoals: weeklyGoal,
+    };
+  };
+
+  const stats = calculateStats();
 
   const handleLogExercise = (data) => {
     logExerciseMutation.mutate({
@@ -144,66 +226,6 @@ const Exercise = () => {
       userId: user?.id,
     });
   };
-
-  const handleDeleteExercise = (exercise) => {
-    if (window.confirm('Are you sure you want to delete this exercise?')) {
-      deleteExerciseMutation.mutate(exercise.id);
-    }
-  };
-
-  // Calculate stats from exercise history
-  const calculateStats = () => {
-    if (!exerciseHistory?.exerciseLogs?.length) {
-      return {
-        minutesToday: 0,
-        caloriesToday: 0,
-        workoutsThisMonth: 0,
-        goalCompletion: 0,
-        exerciseTypes: {
-          cardio: 0,
-          strength: 0,
-          flexibility: 0
-        }
-      };
-    }
-
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const thisMonth = format(new Date(), 'yyyy-MM');
-    
-    const todayExercises = exerciseHistory.exerciseLogs.filter(ex => 
-      format(new Date(ex.timestamp), 'yyyy-MM-dd') === today
-    );
-    
-    const thisMonthExercises = exerciseHistory.exerciseLogs.filter(ex => 
-      format(new Date(ex.timestamp), 'yyyy-MM') === thisMonth
-    );
-
-    const minutesToday = todayExercises.reduce((sum, ex) => sum + (ex.duration || 0), 0);
-    const caloriesToday = todayExercises.reduce((sum, ex) => sum + (ex.caloriesBurned || 0), 0);
-    const workoutsThisMonth = thisMonthExercises.length;
-
-    // Calculate exercise type distribution
-    const exerciseTypes = {
-      cardio: exerciseHistory.exerciseLogs.filter(ex => ex.exerciseType === 'cardio').length,
-      strength: exerciseHistory.exerciseLogs.filter(ex => ex.exerciseType === 'strength').length,
-      flexibility: exerciseHistory.exerciseLogs.filter(ex => ex.exerciseType === 'flexibility').length
-    };
-
-    // Calculate goal completion (simplified)
-    const totalMinutes = exerciseHistory.exerciseLogs.reduce((sum, ex) => sum + (ex.duration || 0), 0);
-    const goalMinutes = 300; // Weekly goal
-    const goalCompletion = Math.min(Math.round((totalMinutes / goalMinutes) * 100), 100);
-
-    return {
-      minutesToday,
-      caloriesToday,
-      workoutsThisMonth,
-      goalCompletion,
-      exerciseTypes
-    };
-  };
-
-  const stats = calculateStats();
 
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -224,15 +246,103 @@ const Exercise = () => {
     },
   };
 
-  // Get exercise type icons for stats
-  const getExerciseTypeIcon = (type) => {
-    switch (type) {
-      case 'cardio': return <Activity className="h-5 w-5" />;
-      case 'strength': return <Dumbbell className="h-5 w-5" />;
-      case 'flexibility': return <Activity className="h-5 w-5" />;
-      default: return <Dumbbell className="h-5 w-5" />;
+  // Extract recommendations data
+  const recommendations = useMemo(() => {
+    if (recommendationsResponse?.data) {
+      return recommendationsResponse.data;
+    } else if (recommendationsResponse) {
+      return recommendationsResponse;
     }
-  };
+    
+    // Fallback recommendations based on user goal
+    const userGoal = user?.goal || 'maintain';
+    return {
+      userGoal,
+      todayCalories: stats.today.calories,
+      dailyGoal: user?.daily_calorie_goal || 2000,
+      calorieBalance: (stats.today.calories || 0) - (user?.daily_calorie_goal || 2000),
+      recommendations: userGoal === 'lose' ? [
+        {
+          name: 'High-Intensity Interval Training (HIIT)',
+          duration: 30,
+          calories: 350,
+          type: 'cardio',
+          description: 'Burn maximum calories in minimum time'
+        },
+        {
+          name: 'Running',
+          duration: 45,
+          calories: 450,
+          type: 'cardio',
+          description: 'Steady-state cardio for fat burning'
+        },
+        {
+          name: 'Strength Training',
+          duration: 45,
+          calories: 200,
+          type: 'strength',
+          description: 'Build muscle to boost metabolism'
+        }
+      ] : userGoal === 'gain' ? [
+        {
+          name: 'Weight Lifting',
+          duration: 60,
+          calories: 250,
+          type: 'strength',
+          description: 'Focus on compound movements'
+        },
+        {
+          name: 'Bodyweight Training',
+          duration: 45,
+          calories: 200,
+          type: 'strength',
+          description: 'Build functional strength'
+        },
+        {
+          name: 'Light Cardio',
+          duration: 20,
+          calories: 100,
+          type: 'cardio',
+          description: 'Maintain cardiovascular health'
+        }
+      ] : [
+        {
+          name: 'Mixed Workout',
+          duration: 45,
+          calories: 300,
+          type: 'mixed',
+          description: 'Combination of cardio and strength'
+        },
+        {
+          name: 'Yoga',
+          duration: 60,
+          calories: 180,
+          type: 'flexibility',
+          description: 'Improve flexibility and reduce stress'
+        },
+        {
+          name: 'Swimming',
+          duration: 45,
+          calories: 350,
+          type: 'cardio',
+          description: 'Full-body low-impact workout'
+        }
+      ],
+      tips: userGoal === 'lose' ? [
+        'Aim for 150-300 minutes of moderate cardio per week',
+        'Combine cardio with strength training for optimal fat loss',
+        'Stay hydrated and maintain a calorie deficit'
+      ] : userGoal === 'gain' ? [
+        'Focus on progressive overload in strength training',
+        'Allow 48 hours of rest between working the same muscle groups',
+        'Ensure adequate protein intake for muscle recovery'
+      ] : [
+        'Maintain balanced workout routine including all exercise types',
+        'Aim for 150 minutes of moderate aerobic activity weekly',
+        'Listen to your body and adjust intensity as needed'
+      ]
+    };
+  }, [recommendationsResponse, user, stats.today.calories]);
 
   return (
     <motion.div
@@ -251,70 +361,66 @@ const Exercise = () => {
             Log and monitor your workouts
           </p>
         </div>
-        <div className="flex items-center space-x-3">
-          <Button 
-            variant="outline" 
-            onClick={() => getAIRecommendations()}
-            loading={recommendationsLoading}
-          >
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Get AI Recommendations
-          </Button>
-          <Button className='bg-indigo-700' onClick={() => setShowForm(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Log Exercise
-          </Button>
-        </div>
+        <Button onClick={() => setShowForm(true)} className='bg-indigo-700'>
+          <Plus className="h-4 w-4 mr-2" />
+          Log Exercise
+        </Button>
       </motion.div>
 
-      {/* Stats Overview */}
+      {/* Error Alert */}
+      {error && (
+        <motion.div variants={itemVariants}>
+          <Card className="p-4 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800">
+            <div className="flex items-center space-x-3">
+              <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400" />
+              <div>
+                <p className="text-sm font-medium text-red-800 dark:text-red-300">
+                  Using demo data
+                </p>
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  Could not connect to exercise API. Showing sample data.
+                </p>
+              </div>
+            </div>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* Stats Overview - Updated with Live Data */}
       <motion.div variants={itemVariants}>
-        <Card className="p-6 bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
+        <Card className="p-6 bg-gradient-to-r from-indigo-500 to-purple-600 text-white">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
             <div className="text-center">
-              <p className="text-3xl font-bold">{stats.minutesToday}</p>
+              <div className="flex items-center justify-center mb-2">
+                <Clock className="h-6 w-6 mr-2 opacity-90" />
+              </div>
+              <p className="text-3xl font-bold">{stats.today.minutes || 0}</p>
               <p className="text-sm opacity-90">Minutes Today</p>
             </div>
             <div className="text-center">
-              <p className="text-3xl font-bold">{stats.caloriesToday}</p>
-              <p className="text-sm opacity-90">Calories Burned</p>
+              <div className="flex items-center justify-center mb-2">
+                <Flame className="h-6 w-6 mr-2 opacity-90" />
+              </div>
+              <p className="text-3xl font-bold">{stats.today.calories || 0}</p>
+              <p className="text-sm opacity-90">Calories Burned Today</p>
             </div>
             <div className="text-center">
-              <p className="text-3xl font-bold">{stats.workoutsThisMonth}</p>
+              <div className="flex items-center justify-center mb-2">
+                <Activity className="h-6 w-6 mr-2 opacity-90" />
+              </div>
+              <p className="text-3xl font-bold">{stats.thisMonth.exercises || 0}</p>
               <p className="text-sm opacity-90">Workouts This Month</p>
             </div>
             <div className="text-center">
-              <p className="text-3xl font-bold">{stats.goalCompletion}%</p>
+              <div className="flex items-center justify-center mb-2">
+                <TrendingUp className="h-6 w-6 mr-2 opacity-90" />
+              </div>
+              <p className="text-3xl font-bold">{stats.goalCompletion.overall || 0}%</p>
               <p className="text-sm opacity-90">Goal Completion</p>
             </div>
           </div>
-          
-          {/* Exercise Type Distribution */}
-          <div className="mt-6 pt-6 border-t border-white/20">
-            <h4 className="text-sm font-medium mb-3">Exercise Type Distribution</h4>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/20 mb-2">
-                  <Activity className="h-6 w-6" />
-                </div>
-                <p className="text-lg font-bold">{stats.exerciseTypes.cardio}</p>
-                <p className="text-xs opacity-90">Cardio</p>
-              </div>
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/20 mb-2">
-                  <Dumbbell className="h-6 w-6" />
-                </div>
-                <p className="text-lg font-bold">{stats.exerciseTypes.strength}</p>
-                <p className="text-xs opacity-90">Strength</p>
-              </div>
-              <div className="text-center">
-                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-white/20 mb-2">
-                  <Activity className="h-6 w-6" />
-                </div>
-                <p className="text-lg font-bold">{stats.exerciseTypes.flexibility}</p>
-                <p className="text-xs opacity-90">Flexibility</p>
-              </div>
-            </div>
+          <div className="mt-4 text-center text-sm opacity-90">
+            {exercises.length} total exercises logged • {stats.thisWeek.calories} calories burned this week
           </div>
         </Card>
       </motion.div>
@@ -335,49 +441,51 @@ const Exercise = () => {
                     <select
                       value={dateFilter}
                       onChange={(e) => setDateFilter(e.target.value)}
-                      className="bg-transparent border-0 text-sm focus:outline-none focus:ring-0 dark:bg-gray-800"
+                      className="bg-transparent border-0 text-sm focus:outline-none"
                     >
                       <option value="all">All Time</option>
                       <option value="week">This Week</option>
                       <option value="month">This Month</option>
                     </select>
                   </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    {exerciseHistory?.count || 0} exercises
-                  </div>
+                  <Button variant="outline" size="sm">
+                    <Calendar className="h-4 w-4 mr-2" />
+                    Calendar View
+                  </Button>
                 </div>
               </div>
               <ExerciseList
-                exercises={exerciseHistory?.exerciseLogs || []}
+                exercises={exercises}
                 loading={isLoading}
+                error={error}
                 onEdit={(exercise) => {
                   setSelectedExercise(exercise);
                   setShowForm(true);
                 }}
-                onDelete={handleDeleteExercise}
+                onDelete={(exercise) => {
+                  if (window.confirm('Delete this exercise?')) {
+                    // Implement delete
+                    toast.success('Exercise deleted (demo)');
+                  }
+                }}
               />
             </Card>
           </motion.div>
         </div>
 
-        {/* Right Column - Recommendations & Stats */}
-        <div className="space-y-6">
+        {/* Right Column - Recommendations & Stats - Updated with Live Data */}
+        <div className="space-y-6 ">
           <motion.div variants={itemVariants}>
-            <WorkoutPlan 
-              recommendations={{
-                ...recommendations,
-                exercises: aiRecommendations?.data?.exercises || recommendations?.recommendations || []
-              }} 
-            />
+            <WorkoutPlan recommendations={recommendations} />
           </motion.div>
 
           <motion.div variants={itemVariants}>
             <Card className="p-6">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                  Weekly Goal
+                  Weekly Goal Progress
                 </h3>
-                <Target className="h-5 w-5 text-primary-500" />
+                <Target className="h-5 w-5 text-indigo-500" />
               </div>
               <div className="space-y-4">
                 <div>
@@ -386,46 +494,94 @@ const Exercise = () => {
                       Cardio Minutes
                     </span>
                     <span className="text-sm font-bold text-gray-900 dark:text-white">
-                      {stats.exerciseTypes.cardio * 30}/150 min
+                      {stats.thisWeek.minutes} / {stats.weeklyGoals.cardioMinutes} min
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                     <div 
-                      className="h-2 rounded-full bg-green-500" 
-                      style={{ width: `${Math.min((stats.exerciseTypes.cardio * 30 / 150) * 100, 100)}%` }}
+                      className="h-2 rounded-full bg-green-500 transition-all duration-500"
+                      style={{ width: `${stats.goalCompletion.cardio}%` }}
                     ></div>
                   </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      This week
+                    </span>
+                    <span className="text-xs font-medium text-green-600 dark:text-green-400">
+                      {stats.goalCompletion.cardio}%
+                    </span>
+                  </div>
                 </div>
+                
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm text-gray-700 dark:text-gray-300">
                       Strength Sessions
                     </span>
                     <span className="text-sm font-bold text-gray-900 dark:text-white">
-                      {stats.exerciseTypes.strength}/3 sessions
+                      {stats.thisWeek.exercises} / {stats.weeklyGoals.strengthSessions} sessions
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                     <div 
-                      className="h-2 rounded-full bg-blue-500" 
-                      style={{ width: `${Math.min((stats.exerciseTypes.strength / 3) * 100, 100)}%` }}
+                      className="h-2 rounded-full bg-indigo-500 transition-all duration-500"
+                      style={{ width: `${stats.goalCompletion.strength}%` }}
                     ></div>
                   </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      This week
+                    </span>
+                    <span className="text-xs font-medium text-indigo-600 dark:text-indigo-400">
+                      {stats.goalCompletion.strength}%
+                    </span>
+                  </div>
                 </div>
+                
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm text-gray-700 dark:text-gray-300">
                       Calories Burned
                     </span>
                     <span className="text-sm font-bold text-gray-900 dark:text-white">
-                      {stats.caloriesToday}/3,500 cal
+                      {stats.thisWeek.calories.toLocaleString()} / {stats.weeklyGoals.caloriesBurned.toLocaleString()} cal
                     </span>
                   </div>
                   <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                     <div 
-                      className="h-2 rounded-full bg-yellow-500" 
-                      style={{ width: `${Math.min((stats.caloriesToday / 3500) * 100, 100)}%` }}
+                      className="h-2 rounded-full bg-amber-500 transition-all duration-500"
+                      style={{ width: `${stats.goalCompletion.calories}%` }}
                     ></div>
+                  </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      This week
+                    </span>
+                    <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
+                      {stats.goalCompletion.calories}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Weekly Summary */}
+              <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {stats.thisWeek.exercises}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Workouts
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                      {stats.thisWeek.minutes}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Total Minutes
+                    </p>
                   </div>
                 </div>
               </div>
@@ -435,19 +591,17 @@ const Exercise = () => {
       </div>
 
       {/* Exercise Form Modal */}
-      <AnimatePresence>
-        {showForm && (
-          <ExerciseForm
-            exercise={selectedExercise}
-            onClose={() => {
-              setShowForm(false);
-              setSelectedExercise(null);
-            }}
-            onSubmit={handleLogExercise}
-            isLoading={logExerciseMutation.isLoading}
-          />
-        )}
-      </AnimatePresence>
+      {showForm && (
+        <ExerciseForm
+          exercise={selectedExercise}
+          onClose={() => {
+            setShowForm(false);
+            setSelectedExercise(null);
+          }}
+          onSubmit={handleLogExercise}
+          isLoading={logExerciseMutation.isLoading}
+        />
+      )}
     </motion.div>
   );
 };

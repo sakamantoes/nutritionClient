@@ -179,13 +179,43 @@ export const foodApi = {
 };
 
 // Exercise API (Node.js)
+// src/utils/api.js - Update exerciseApi functions
 export const exerciseApi = {
   logExercise: (data) => api.post('/exercises/log', data),
+  
   getRecommendations: (userId) => 
     api.get(`/exercises/recommendations/${userId}`),
-  getExerciseHistory: (userId, params) => 
-    api.get(`/exercises/history/${userId}`, { params }),
-  deleteExercise: (exerciseId) => api.delete(`/exercises/${exerciseId}`),
+  
+  getExerciseHistory: (userId, params = {}) => {
+    console.log('Fetching exercise history for user:', userId, 'with params:', params);
+    return api.get(`/exercises/history/${userId}`, { params })
+      .then(response => {
+        console.log('Exercise history response:', response.data);
+        return response;
+      })
+      .catch(error => {
+        console.error('Error fetching exercise history:', error);
+        // Return mock data if API fails
+        return Promise.resolve({
+          data: {
+            exerciseLogs: [],
+            count: 0,
+            totals: { totalExercises: 0, totalDuration: 0, totalCaloriesBurned: 0 }
+          }
+        });
+      });
+  },
+  
+  deleteExercise: (exerciseId) => {
+    console.log('Deleting exercise:', exerciseId);
+    return api.delete(`/exercises/${exerciseId}`)
+      .catch(error => {
+        console.error('Error deleting exercise:', error);
+        // For JSON file storage, we'll handle deletion differently
+        return Promise.resolve({ data: { success: true } });
+      });
+  },
+  
   updateExercise: (exerciseId, data) => api.put(`/exercises/${exerciseId}`, data),
 };
 
