@@ -1,4 +1,4 @@
-// src/pages/FoodLog.jsx (Updated - Fixed food history display)
+// src/pages/FoodLog.jsx (Updated - Fully Responsive with Mobile Nav)
 import React, { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -14,7 +14,13 @@ import {
   Sandwich,
   Utensils,
   RefreshCw,
-  AlertCircle
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
+  Menu,
+  Grid,
+  List,
+  SlidersHorizontal
 } from 'lucide-react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { useAuth } from '../hooks/useAuth';
@@ -40,6 +46,10 @@ const FoodLog = () => {
   const [mealType, setMealType] = useState('all');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshTime, setLastRefreshTime] = useState(Date.now());
+  const [showFilters, setShowFilters] = useState(false);
+  const [viewMode, setViewMode] = useState('list'); // list or grid
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   // Fetch food history with proper error handling
   const { 
@@ -60,9 +70,9 @@ const FoodLog = () => {
     },
     { 
       enabled: !!user?.id,
-      staleTime: 0, // Always refetch when component mounts
-      cacheTime: 0, // Don't cache
-      retry: 2, // Retry twice on failure
+      staleTime: 0,
+      cacheTime: 0,
+      retry: 2,
       refetchOnWindowFocus: false,
       onError: (error) => {
         console.error('Food history query error:', error);
@@ -70,9 +80,6 @@ const FoodLog = () => {
       },
       onSuccess: (data) => {
         console.log('Food history loaded successfully:', data);
-        if (data?.foodLogs?.length > 0) {
-          toast.success(`Loaded ${data.foodLogs.length} food logs`);
-        }
       }
     }
   );
@@ -81,21 +88,16 @@ const FoodLog = () => {
   const logFoodMutation = useMutation(foodApi.logFood, {
     onMutate: async (newFood) => {
       try {
-        // Cancel any outgoing refetches
         await queryClient.cancelQueries(['foodHistory', user?.id, mealType]);
-        
-        // Snapshot the previous value
         const previousFoodHistory = queryClient.getQueryData(['foodHistory', user?.id, mealType]);
         
-        // Create a timestamp for the new food log
         const newFoodWithTimestamp = {
           ...newFood,
-          id: Date.now(), // Temporary ID for optimistic update
+          id: Date.now(),
           timestamp: newFood.timestamp || new Date().toISOString(),
           createdAt: new Date().toISOString(),
         };
 
-        // Optimistically update to the new value
         queryClient.setQueryData(['foodHistory', user?.id, mealType], (old) => {
           if (!old) {
             return { 
@@ -105,7 +107,6 @@ const FoodLog = () => {
             };
           }
           
-          // Ensure old has the expected structure
           const currentFoodLogs = Array.isArray(old.foodLogs) ? old.foodLogs : [];
           return {
             ...old,
@@ -126,7 +127,6 @@ const FoodLog = () => {
       const newFoodLog = response.data?.foodLog;
       
       if (newFoodLog) {
-        // Force refetch to ensure we have latest data from server
         setLastRefreshTime(Date.now());
         queryClient.invalidateQueries(['foodHistory', user?.id, mealType]);
         queryClient.invalidateQueries(['dailySummary', user?.id]);
@@ -140,13 +140,11 @@ const FoodLog = () => {
       console.error('Food log error:', error);
       toast.error(errorMessage);
       
-      // Rollback to previous state
       if (context?.previousFoodHistory) {
         queryClient.setQueryData(['foodHistory', user?.id, mealType], context.previousFoodHistory);
       }
     },
     onSettled: () => {
-      // Always refetch after error or success
       queryClient.invalidateQueries(['foodHistory', user?.id, mealType]);
     },
   });
@@ -191,7 +189,6 @@ const FoodLog = () => {
   const foodLogsArray = useMemo(() => {
     if (!foodHistory) return [];
     
-    // Handle different possible response structures
     if (Array.isArray(foodHistory)) {
       return foodHistory;
     }
@@ -200,7 +197,6 @@ const FoodLog = () => {
       return foodHistory.foodLogs;
     }
     
-    // Check for other possible array properties
     const possibleArrayProps = ['data', 'items', 'logs', 'records'];
     for (const prop of possibleArrayProps) {
       if (Array.isArray(foodHistory[prop])) {
@@ -219,19 +215,16 @@ const FoodLog = () => {
       .filter(log => {
         if (!log || typeof log !== 'object') return false;
         
-        // Filter by search query
         const matchesSearch = searchQuery === '' || 
           (log.foodName && log.foodName.toLowerCase().includes(searchQuery.toLowerCase())) ||
           (log.foodGroup && log.foodGroup.toLowerCase().includes(searchQuery.toLowerCase())) ||
           (log.mealType && log.mealType.toLowerCase().includes(searchQuery.toLowerCase()));
         
-        // Filter by meal type
         const matchesMealType = mealType === 'all' || log.mealType === mealType;
         
         return matchesSearch && matchesMealType;
       })
       .sort((a, b) => {
-        // Sort by timestamp (newest first)
         try {
           const dateA = a.timestamp ? new Date(a.timestamp) : new Date(0);
           const dateB = b.timestamp ? new Date(b.timestamp) : new Date(0);
@@ -242,8 +235,21 @@ const FoodLog = () => {
       });
   }, [foodLogsArray, searchQuery, mealType]);
 
+  // Pagination
+  const paginatedFoodLogs = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredFoodLogs.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredFoodLogs, currentPage]);
+
+  const totalPages = Math.ceil(filteredFoodLogs.length / itemsPerPage);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, mealType]);
+
   const mealTypes = [
-    { id: 'all', label: 'All Meals', icon: Utensils, color: 'gray' },
+    { id: 'all', label: 'All', icon: Utensils, color: 'gray' },
     { id: 'breakfast', label: 'Breakfast', icon: Coffee, color: 'yellow' },
     { id: 'lunch', label: 'Lunch', icon: Sandwich, color: 'blue' },
     { id: 'dinner', label: 'Dinner', icon: Utensils, color: 'purple' },
@@ -256,24 +262,21 @@ const FoodLog = () => {
   };
 
   const handleLogFood = (data) => {
-    // Validate required fields
     if (!data.foodName || !data.calories) {
       toast.error('Please fill in all required fields');
       return;
     }
 
-    // Ensure we have a userId
     if (!user?.id) {
       toast.error('User not found. Please log in again.');
       return;
     }
 
-    // Prepare data for API
     const foodData = {
       userId: user.id,
       foodName: data.foodName.trim(),
       foodGroup: data.foodGroup || 'other',
-      servingSize: data.servingSize || 100,
+      servingSize: Number(data.servingSize) || 100,
       calories: Number(data.calories) || 0,
       protein: Number(data.protein) || 0,
       carbs: Number(data.carbs) || 0,
@@ -307,6 +310,8 @@ const FoodLog = () => {
 
   const handleClearSearch = () => {
     setSearchQuery('');
+    setMealType('all');
+    setShowFilters(false);
   };
 
   const handleRefresh = async () => {
@@ -333,18 +338,6 @@ const FoodLog = () => {
     };
   }, [filteredFoodLogs]);
 
-  // Debug: Log current state
-  useEffect(() => {
-    console.log('FoodLog Component State:', {
-      userId: user?.id,
-      foodHistory: foodHistory,
-      foodLogsArray: foodLogsArray,
-      filteredFoodLogs: filteredFoodLogs,
-      isLoading,
-      error
-    });
-  }, [user?.id, foodHistory, foodLogsArray, filteredFoodLogs, isLoading, error]);
-
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -369,329 +362,449 @@ const FoodLog = () => {
       initial="hidden"
       animate="visible"
       variants={containerVariants}
-      className="space-y-6"
+      className="w-full min-h-screen bg-gray-50 dark:bg-gray-900 pb-24 lg:pb-6"
     >
-      {/* Header */}
-      <motion.div variants={itemVariants} className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Food Log
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400">
-            Track your daily nutrition intake
-          </p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <Button
-            variant="outline"
-            onClick={() => setShowSearch(true)}
-            disabled={logFoodMutation.isLoading}
-          >
-            <Search className="h-4 w-4 mr-2" />
-            Search Foods
-          </Button>
-          <Button
-            onClick={() => setShowForm(true)}
-            className='text-white bg-indigo-500 hover:bg-indigo-600'
-            disabled={logFoodMutation.isLoading}
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Food
-          </Button>
-        </div>
-      </motion.div>
-
-      {/* Search Bar */}
-      <motion.div variants={itemVariants}>
-        <Card className="p-4">
-          <div className="flex items-center space-x-4">
-            <div className="flex-1 relative">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder="Search your food history..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-10"
-                  disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
-                />
-                {searchQuery && (
-                  <button
-                    onClick={handleClearSearch}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                    disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-              {searchQuery && (
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                  Found {filteredFoodLogs.length} result{filteredFoodLogs.length !== 1 ? 's' : ''} for "{searchQuery}"
-                </p>
-              )}
-            </div>
-            <Button 
+      <div className="w-full max-w-7xl mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 space-y-4 sm:space-y-6">
+        {/* Header */}
+        <motion.div variants={itemVariants} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
+              Food Log
+            </h1>
+            <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+              Track your daily nutrition intake
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:space-x-3">
+            <Button
               variant="outline"
-              disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
+              size="sm"
+              onClick={() => setShowSearch(true)}
+              disabled={logFoodMutation.isLoading}
+              className="flex-1 sm:flex-none text-xs sm:text-sm px-3 sm:px-4 py-2"
             >
-              <Camera className="h-4 w-4 mr-2" />
-              Scan Food
+              <Search className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+              <span className="hidden xs:inline">Search</span>
+              <span className="xs:hidden">Find</span>
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => setShowForm(true)}
+              className="flex-1 sm:flex-none text-white bg-gradient-to-r from-indigo-500 to-indigo-500 hover:from-indigo-600 hover:to-indigo-600 text-xs sm:text-sm px-3 sm:px-4 py-2"
+              disabled={logFoodMutation.isLoading}
+            >
+              <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+              <span className="hidden xs:inline">Add Food</span>
+              <span className="xs:hidden">Add</span>
             </Button>
           </div>
-        </Card>
-      </motion.div>
+        </motion.div>
 
-      {/* Controls */}
-      <motion.div variants={itemVariants} className="flex items-center justify-between">
-        {/* Meal Type Filter */}
-        <div className="flex items-center space-x-2 overflow-x-auto pb-2">
-          {mealTypes.map((type) => (
-            <button
-              key={type.id}
-              onClick={() => setMealType(type.id)}
-              disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
-              className={`flex items-center space-x-2 px-4 py-2 rounded-full whitespace-nowrap transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
-                mealType === type.id
-                  ? `bg-${type.color}-100 dark:bg-${type.color}-900/30 text-${type.color}-600 dark:text-${type.color}-400`
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-              }`}
-            >
-              <type.icon className="h-4 w-4" />
-              <span className="font-medium">{type.label}</span>
-            </button>
-          ))}
-        </div>
-        
-        {/* Refresh Button */}
-        <button
-          onClick={handleRefresh}
-          disabled={isRefreshing || logFoodMutation.isLoading || deleteFoodMutation.isLoading}
-          className="flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <RefreshCw className={`h-4 w-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
-          {isRefreshing ? 'Refreshing...' : 'Refresh'}
-        </button>
-      </motion.div>
-
-      {/* Food History */}
-      <motion.div variants={itemVariants}>
-        <Card className="p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
-                Recent Meals
-              </h3>
-              <div className="flex items-center space-x-2 mt-1">
-                <span className="text-sm text-gray-500 dark:text-gray-400">
-                  {filteredFoodLogs.length} food logs
-                </span>
-                {searchQuery && (
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    • Search: "{searchQuery}"
-                  </span>
-                )}
-                {mealType !== 'all' && (
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
-                    • Filter: {mealType}
-                  </span>
-                )}
+        {/* Search Bar - Mobile Optimized */}
+        <motion.div variants={itemVariants}>
+          <Card className="p-3 sm:p-4">
+            <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-2 sm:gap-4">
+              <div className="flex-1 relative">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                  <Input
+                    type="text"
+                    placeholder="Search foods..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 sm:pl-10 pr-8 sm:pr-10 py-2 sm:py-2.5 text-sm"
+                    disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={handleClearSearch}
+                      className="absolute right-2 sm:right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+              
+              {/* Mobile Filter Toggle */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="xs:hidden flex items-center justify-center px-3 py-2 bg-gray-100 dark:bg-gray-800 rounded-lg"
+                >
+                  <SlidersHorizontal className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                </button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  className="hidden xs:flex items-center"
+                  disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
+                >
+                  <Camera className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                  <span className="hidden sm:inline">Scan Food</span>
+                  <span className="sm:hidden">Scan</span>
+                </Button>
               </div>
             </div>
-            <div className="flex items-center space-x-2">
+            
+            {/* Search Results Count - Mobile */}
+            {searchQuery && (
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 mt-2">
+                Found {filteredFoodLogs.length} result{filteredFoodLogs.length !== 1 ? 's' : ''} for "{searchQuery}"
+              </p>
+            )}
+          </Card>
+        </motion.div>
+
+        {/* Controls Bar - Responsive */}
+        <motion.div variants={itemVariants} className="flex flex-col xs:flex-row items-start xs:items-center justify-between gap-3">
+          {/* Meal Type Filter - Horizontal Scroll on Mobile */}
+          <div className="w-full xs:w-auto overflow-x-auto pb-1 xs:pb-0">
+            <div className="flex items-center space-x-1.5 sm:space-x-2 min-w-max xs:min-w-0">
+              {mealTypes.map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => setMealType(type.id)}
+                  disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
+                  className={`
+                    flex items-center space-x-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full whitespace-nowrap 
+                    transition-all duration-200 text-xs sm:text-sm
+                    disabled:opacity-50 disabled:cursor-not-allowed
+                    ${mealType === type.id
+                      ? `bg-${type.color}-100 dark:bg-${type.color}-900/30 text-${type.color}-600 dark:text-${type.color}-400`
+                      : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                    }
+                  `}
+                >
+                  <type.icon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  <span className="hidden xs:inline">{type.label}</span>
+                  <span className="xs:hidden">{type.id === 'all' ? 'All' : type.label.slice(0, 3)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right Controls */}
+          <div className="flex items-center justify-between xs:justify-end w-full xs:w-auto gap-2">
+            {/* View Mode Toggle - Hidden on Mobile */}
+            <div className="hidden sm:flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-1.5 rounded-md transition-colors ${
+                  viewMode === 'list' 
+                    ? 'bg-white dark:bg-gray-700 shadow-sm' 
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}
+              >
+                <List className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-1.5 rounded-md transition-colors ${
+                  viewMode === 'grid' 
+                    ? 'bg-white dark:bg-gray-700 shadow-sm' 
+                    : 'text-gray-500 dark:text-gray-400'
+                }`}
+              >
+                <Grid className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Refresh Button */}
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing || logFoodMutation.isLoading || deleteFoodMutation.isLoading}
+              className="flex items-center text-xs sm:text-sm text-gray-600 dark:text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 transition-colors px-2 py-1.5 rounded-lg disabled:opacity-50"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 ${isRefreshing ? 'animate-spin' : ''}`} />
+              <span className="hidden xs:inline">{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
+            </button>
+          </div>
+        </motion.div>
+
+        {/* Mobile Filters Panel */}
+        <AnimatePresence>
+          {showFilters && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="xs:hidden"
+            >
+              <Card className="p-4">
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Filters
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {mealTypes.filter(t => t.id !== 'all').map((type) => (
+                      <button
+                        key={type.id}
+                        onClick={() => setMealType(type.id)}
+                        className={`px-3 py-1.5 rounded-full text-xs ${
+                          mealType === type.id
+                            ? `bg-${type.color}-100 dark:bg-${type.color}-900/30 text-${type.color}-600 dark:text-${type.color}-400`
+                            : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400'
+                        }`}
+                      >
+                        {type.label}
+                      </button>
+                    ))}
+                  </div>
+                  {(searchQuery || mealType !== 'all') && (
+                    <button
+                      onClick={handleClearSearch}
+                      className="text-xs text-primary-600 dark:text-primary-400 font-medium"
+                    >
+                      Clear all filters
+                    </button>
+                  )}
+                </div>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Food History */}
+        <motion.div variants={itemVariants}>
+          <Card className="p-4 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 sm:mb-6">
+              <div>
+                <h3 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white">
+                  Recent Meals
+                </h3>
+                <div className="flex flex-wrap items-center gap-2 mt-1">
+                  <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                    {filteredFoodLogs.length} {filteredFoodLogs.length === 1 ? 'log' : 'logs'}
+                  </span>
+                  {searchQuery && (
+                    <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
+                      Search: "{searchQuery}"
+                    </span>
+                  )}
+                  {mealType !== 'all' && (
+                    <span className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-800 px-2 py-0.5 rounded-full capitalize">
+                      {mealType}
+                    </span>
+                  )}
+                </div>
+              </div>
+              
               {(searchQuery || mealType !== 'all') && (
                 <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setMealType('all');
-                  }}
-                  disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
-                  className="text-sm text-primary-600 dark:text-primary-400 hover:underline disabled:opacity-50"
+                  onClick={handleClearSearch}
+                  className="hidden sm:inline text-sm text-primary-600 dark:text-primary-400 hover:underline self-start"
                 >
                   Clear filters
                 </button>
               )}
             </div>
-          </div>
 
-          {error ? (
-            <div className="text-center py-12">
-              <div className="mx-auto w-20 h-20 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
-                <AlertCircle className="h-10 w-10 text-red-500" />
+            {error ? (
+              <div className="text-center py-8 sm:py-12 px-4">
+                <div className="mx-auto w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4">
+                  <AlertCircle className="h-8 w-8 sm:h-10 sm:w-10 text-red-500" />
+                </div>
+                <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  Failed to load food history
+                </h4>
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-4">
+                  {error.message || 'An error occurred while loading your food history'}
+                </p>
+                <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 justify-center">
+                  <Button onClick={handleRefresh} variant="outline" size="sm">
+                    <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" />
+                    Try Again
+                  </Button>
+                  <Button onClick={() => setShowForm(true)} size="sm">
+                    <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" />
+                    Add Food
+                  </Button>
+                </div>
               </div>
-              <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                Failed to load food history
-              </h4>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                {error.message || 'An error occurred while loading your food history'}
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Button 
-                  onClick={handleRefresh} 
-                  variant="outline"
-                  disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Try Again
-                </Button>
-                <Button 
-                  onClick={() => setShowForm(true)}
-                  disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Food Anyway
-                </Button>
-              </div>
-            </div>
-          ) : isLoading ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <LoadingSpinner size="lg" />
-              <p className="mt-4 text-gray-600 dark:text-gray-400">
-                Loading your food history...
-              </p>
-            </div>
-          ) : filteredFoodLogs.length > 0 ? (
-            <div className="space-y-4">
-              <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <p className="text-sm text-blue-700 dark:text-blue-300">
-                  Showing {filteredFoodLogs.length} of {foodLogsArray.length} total food logs
+            ) : isLoading ? (
+              <div className="flex flex-col items-center justify-center py-8 sm:py-12">
+                <LoadingSpinner size="lg" />
+                <p className="mt-4 text-xs sm:text-sm text-gray-600 dark:text-gray-400">
+                  Loading your food history...
                 </p>
               </div>
-              
-              {filteredFoodLogs.map((log, index) => (
-                <motion.div
-                  key={log.id || `food-${index}`}
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <MealCard
-                    food={log}
-                    onEdit={() => {
-                      setSelectedFood(log);
-                      setShowForm(true);
-                    }}
-                    onDelete={() => handleDeleteFood(log.id)}
-                  />
-                </motion.div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-12">
-              <div className="mx-auto w-24 h-24 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
-                {searchQuery || mealType !== 'all' ? (
-                  <Search className="h-12 w-12 text-gray-400" />
-                ) : (
-                  <Utensils className="h-12 w-12 text-gray-400" />
-                )}
-              </div>
-              <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                {searchQuery 
-                  ? `No results found for "${searchQuery}"`
-                  : mealType !== 'all'
-                  ? `No ${mealType} meals logged yet`
-                  : 'No food logged yet'
-                }
-              </h4>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
-                {searchQuery
-                  ? 'Try a different search term or clear your filters'
-                  : 'Start logging your meals to track your nutrition'
-                }
-              </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                {(searchQuery || mealType !== 'all') && (
-                  <Button 
-                    variant="outline" 
-                    onClick={() => {
-                      setSearchQuery('');
-                      setMealType('all');
-                    }}
-                    disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
-                  >
-                    Clear All Filters
-                  </Button>
-                )}
-                <Button 
-                  onClick={() => setShowForm(true)}
-                  disabled={logFoodMutation.isLoading || deleteFoodMutation.isLoading}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Your First Meal
-                </Button>
-              </div>
-            </div>
-          )}
-        </Card>
-      </motion.div>
+            ) : paginatedFoodLogs.length > 0 ? (
+              <>
+                <div className="mb-3 p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                  <p className="text-xs sm:text-sm text-blue-700 dark:text-blue-300">
+                    Showing {paginatedFoodLogs.length} of {filteredFoodLogs.length} {filteredFoodLogs.length === 1 ? 'log' : 'logs'}
+                  </p>
+                </div>
+                
+                {/* Grid/List View */}
+                <div className={`
+                  ${viewMode === 'grid' && filteredFoodLogs.length >= 3 
+                    ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4' 
+                    : 'space-y-3 sm:space-y-4'
+                  }
+                `}>
+                  {paginatedFoodLogs.map((log, index) => (
+                    <motion.div
+                      key={log.id || `food-${index}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.05 }}
+                    >
+                      <MealCard
+                        food={log}
+                        onEdit={() => {
+                          setSelectedFood(log);
+                          setShowForm(true);
+                        }}
+                        onDelete={() => handleDeleteFood(log.id)}
+                      />
+                    </motion.div>
+                  ))}
+                </div>
 
-      {/* Nutrition Summary */}
-      {filteredFoodLogs.length > 0 && (
-        <motion.div variants={itemVariants}>
-          <Card className="p-6">
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
-              Nutrition Summary
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {nutritionTotals.calories.toFixed(0)}
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between sm:justify-center mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage === 1}
+                        className="p-2 rounded-lg border border-gray-300 dark:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                      </button>
+                      <span className="text-xs sm:text-sm text-gray-700 dark:text-gray-300 px-2">
+                        Page {currentPage} of {totalPages}
+                      </span>
+                      <button
+                        onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage === totalPages}
+                        className="p-2 rounded-lg border border-gray-300 dark:border-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ChevronRight className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-8 sm:py-12 px-4">
+                <div className="mx-auto w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gray-100 dark:bg-gray-800 flex items-center justify-center mb-4">
+                  {searchQuery || mealType !== 'all' ? (
+                    <Search className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
+                  ) : (
+                    <Utensils className="h-10 w-10 sm:h-12 sm:w-12 text-gray-400" />
+                  )}
                 </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Total Calories
+                <h4 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                  {searchQuery 
+                    ? `No results for "${searchQuery}"`
+                    : mealType !== 'all'
+                    ? `No ${mealType} meals`
+                    : 'No food logged yet'
+                  }
+                </h4>
+                <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 mb-6">
+                  {searchQuery
+                    ? 'Try a different search term'
+                    : 'Start logging your meals to track your nutrition'
+                  }
+                </p>
+                <div className="flex flex-col xs:flex-row gap-2 sm:gap-3 justify-center">
+                  {(searchQuery || mealType !== 'all') && (
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={handleClearSearch}
+                    >
+                      Clear Filters
+                    </Button>
+                  )}
+                  <Button 
+                    size="sm"
+                    onClick={() => setShowForm(true)}
+                    className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white"
+                  >
+                    <Plus className="h-3 w-3 sm:h-4 sm:w-4 mr-1.5" />
+                    Add Meal
+                  </Button>
                 </div>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {nutritionTotals.protein.toFixed(1)}g
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Protein
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {nutritionTotals.carbs.toFixed(1)}g
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Carbs
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {nutritionTotals.fat.toFixed(1)}g
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  Fat
-                </div>
-              </div>
-            </div>
+            )}
           </Card>
         </motion.div>
-      )}
 
-      {/* Modals */}
-      <AnimatePresence>
-        {showSearch && (
-          <FoodSearch
-            onClose={() => setShowSearch(false)}
-            onSelect={handleFoodSelect}
-          />
+        {/* Nutrition Summary - Mobile Optimized */}
+        {filteredFoodLogs.length > 0 && (
+          <motion.div variants={itemVariants}>
+            <Card className="p-4 sm:p-6">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white mb-3 sm:mb-4">
+                Today's Nutrition
+              </h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                <div className="text-center p-2 sm:p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                  <div className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
+                    {nutritionTotals.calories.toFixed(0)}
+                  </div>
+                  <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                    Calories
+                  </div>
+                </div>
+                <div className="text-center p-2 sm:p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                  <div className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
+                    {nutritionTotals.protein.toFixed(1)}g
+                  </div>
+                  <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                    Protein
+                  </div>
+                </div>
+                <div className="text-center p-2 sm:p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                  <div className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
+                    {nutritionTotals.carbs.toFixed(1)}g
+                  </div>
+                  <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                    Carbs
+                  </div>
+                </div>
+                <div className="text-center p-2 sm:p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
+                  <div className="text-lg sm:text-2xl font-bold text-gray-900 dark:text-white">
+                    {nutritionTotals.fat.toFixed(1)}g
+                  </div>
+                  <div className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">
+                    Fat
+                  </div>
+                </div>
+              </div>
+            </Card>
+          </motion.div>
         )}
 
-        {showForm && (
-          <FoodLogForm
-            food={selectedFood}
-            onClose={() => {
-              setShowForm(false);
-              setSelectedFood(null);
-            }}
-            onSubmit={handleLogFood}
-            isLoading={logFoodMutation.isLoading}
-          />
-        )}
-      </AnimatePresence>
+        {/* Mobile Spacing for Bottom Navigation */}
+        <div className="h-16 sm:h-0 lg:h-0" />
+
+        {/* Modals */}
+        <AnimatePresence>
+          {showSearch && (
+            <FoodSearch
+              onClose={() => setShowSearch(false)}
+              onSelect={handleFoodSelect}
+            />
+          )}
+
+          {showForm && (
+            <FoodLogForm
+              food={selectedFood}
+              onClose={() => {
+                setShowForm(false);
+                setSelectedFood(null);
+              }}
+              onSubmit={handleLogFood}
+              isLoading={logFoodMutation.isLoading}
+            />
+          )}
+        </AnimatePresence>
+      </div>
     </motion.div>
   );
 };

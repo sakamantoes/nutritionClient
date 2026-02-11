@@ -10,13 +10,12 @@ import {
   ChevronRight,
   Utensils,
   Dumbbell,
-  AlertCircle,
   Droplets,
   RefreshCw,
 } from "lucide-react";
 import { useQuery } from "react-query";
 import { useAuth } from "../hooks/useAuth";
-import { authApi, foodApi, exerciseApi, mlApi } from "../utils/api";
+import { foodApi, exerciseApi, mlApi } from "../utils/api";
 import { format } from "date-fns";
 
 // Components
@@ -36,18 +35,24 @@ const Dashboard = () => {
   const [dailyStats, setDailyStats] = useState({
     calories: 0,
     protein: 0,
+    carbs: 0,
+    fat: 0,
+    fiber: 0,
+    sugar: 0,
+    sodium: 0,
     exerciseMinutes: 0,
     waterIntake: 1.8,
   });
 
-  // Fetch today's food logs
+  // Fetch today's food logs with proper error handling
   const { 
-    data: todayFoods, 
+    data: foodsResponse, 
     isLoading: foodsLoading,
     refetch: refetchFoods,
-    isRefetching: isRefetchingFoods
+    isRefetching: isRefetchingFoods,
+    error: foodsError
   } = useQuery(
-    ["todayFoods", user?.id, today],
+    ["foodHistory", user?.id, today],
     () => foodApi.getFoodHistory(user?.id, {
       startDate: today,
       endDate: today,
@@ -55,20 +60,26 @@ const Dashboard = () => {
     { 
       enabled: !!user,
       refetchOnWindowFocus: true,
-      onSuccess: (data) => {
-        console.log("Today's foods loaded:", data);
+      retry: 2,
+      onSuccess: (response) => {
+        console.log("✅ Foods API Success - Full Response:", response);
+        console.log("✅ Foods Data:", response?.data || response);
       },
+      onError: (error) => {
+        console.error("❌ Foods API Error:", error);
+      }
     }
   );
 
-  // Fetch today's exercises - FIXED: Access response.data correctly
+  // Fetch today's exercises with proper error handling
   const { 
-    data: todayExercises, 
+    data: exercisesResponse, 
     isLoading: exercisesLoading,
     refetch: refetchExercises,
-    isRefetching: isRefetchingExercises
+    isRefetching: isRefetchingExercises,
+    error: exercisesError
   } = useQuery(
-    ["todayExercises", user?.id, today],
+    ["exerciseHistory", user?.id, today],
     () => exerciseApi.getExerciseHistory(user?.id, {
       startDate: today,
       endDate: today,
@@ -76,55 +87,103 @@ const Dashboard = () => {
     { 
       enabled: !!user,
       refetchOnWindowFocus: true,
-      onSuccess: (data) => {
-        console.log("Today's exercises loaded:", data);
+      retry: 2,
+      onSuccess: (response) => {
+        console.log("✅ Exercises API Success - Full Response:", response);
+        console.log("✅ Exercises Data:", response?.data || response);
       },
+      onError: (error) => {
+        console.error("❌ Exercises API Error:", error);
+      }
     }
   );
 
-  // Calculate daily totals from data
+  // Extract food logs from response (handle both direct and nested data)
+  const foodLogs = foodsResponse?.data?.foodLogs || 
+                    foodsResponse?.foodLogs || 
+                    [];
+
+  // Extract exercise logs from response (handle both direct and nested data)
+  const exerciseLogs = exercisesResponse?.data?.exerciseLogs || 
+                       exercisesResponse?.exerciseLogs || 
+                       [];
+
+  // Debug logging
   useEffect(() => {
-    if (todayFoods?.foodLogs) {
-      const totals = todayFoods.foodLogs.reduce(
+    console.log("📊 Current State - User:", user?.id);
+    console.log("📊 Current State - Today:", today);
+    console.log("📊 Current State - Food Logs Count:", foodLogs.length);
+    console.log("📊 Current State - Exercise Logs Count:", exerciseLogs.length);
+    console.log("📊 Current State - Raw Food Response:", foodsResponse);
+    console.log("📊 Current State - Raw Exercise Response:", exercisesResponse);
+  }, [foodLogs, exerciseLogs, foodsResponse, exercisesResponse, user, today]);
+
+  // Calculate daily totals from food logs
+  useEffect(() => {
+    if (foodLogs && foodLogs.length > 0) {
+      console.log("🧮 Processing food logs:", foodLogs);
+      
+      const totals = foodLogs.reduce(
         (acc, food) => ({
-          calories: acc.calories + (food.calories || 0),
-          protein: acc.protein + (food.protein || 0),
-          carbs: acc.carbs + (food.carbs || 0),
-          fat: acc.fat + (food.fat || 0),
-          fiber: acc.fiber + (food.fiber || 0),
-          sugar: acc.sugar + (food.sugar || 0),
-          sodium: acc.sodium + (food.sodium || 0),
+          calories: acc.calories + (Number(food.calories) || 0),
+          protein: acc.protein + (Number(food.protein) || 0),
+          carbs: acc.carbs + (Number(food.carbs) || 0),
+          fat: acc.fat + (Number(food.fat) || 0),
+          fiber: acc.fiber + (Number(food.fiber) || 0),
+          sugar: acc.sugar + (Number(food.sugar) || 0),
+          sodium: acc.sodium + (Number(food.sodium) || 0),
         }),
         { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sodium: 0 }
       );
 
+      console.log("📊 Calculated Food Totals:", totals);
+      
       setDailyStats(prev => ({
         ...prev,
-        calories: totals.calories,
-        protein: totals.protein,
+        ...totals,
       }));
 
       // Calculate health score
       calculateHealthScore(totals);
+    } else {
+      // Reset stats if no food logs
+      setDailyStats(prev => ({
+        ...prev,
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        fiber: 0,
+        sugar: 0,
+        sodium: 0,
+      }));
+      setHealthScore(5.0); // Default score when no data
     }
-  }, [todayFoods]);
+  }, [foodLogs]);
 
+  // Calculate exercise minutes from exercise logs
   useEffect(() => {
-    // FIXED: Check if todayExercises has data property (full response) or is already the data
-    const exerciseData = todayExercises?.data ? todayExercises.data : todayExercises;
-    
-    if (exerciseData?.exerciseLogs) {
-      const totalExerciseMinutes = exerciseData.exerciseLogs.reduce(
-        (acc, exercise) => acc + (exercise.duration || 0),
+    if (exerciseLogs && exerciseLogs.length > 0) {
+      console.log("🧮 Processing exercise logs:", exerciseLogs);
+      
+      const totalExerciseMinutes = exerciseLogs.reduce(
+        (acc, exercise) => acc + (Number(exercise.duration) || 0),
         0
       );
+      
+      console.log("📊 Total Exercise Minutes:", totalExerciseMinutes);
       
       setDailyStats(prev => ({
         ...prev,
         exerciseMinutes: totalExerciseMinutes,
       }));
+    } else {
+      setDailyStats(prev => ({
+        ...prev,
+        exerciseMinutes: 0,
+      }));
     }
-  }, [todayExercises]);
+  }, [exerciseLogs]);
 
   const calculateHealthScore = async (nutritionData) => {
     try {
@@ -146,27 +205,27 @@ const Dashboard = () => {
       };
 
       const response = await mlApi.predictHealthScore(completeData);
-      setHealthScore(response.data.health_score);
+      const score = response.data.health_score || 7.5;
+      setHealthScore(score);
     } catch (error) {
       console.error("Error calculating health score:", error);
-      // Fallback to manual calculation if ML API fails
       const manualScore = calculateManualHealthScore(nutritionData);
       setHealthScore(manualScore);
     }
   };
 
   const calculateManualHealthScore = (nutritionData) => {
+    if (nutritionData.calories === 0) return 5.0; // Default when no data
+    
     let score = 7.0; // Base score
     
-    // Adjust based on nutrition
     if (nutritionData.protein > 50) score += 0.5;
     if (nutritionData.fiber > 20) score += 0.5;
     if (nutritionData.sugar < 30) score += 0.5;
     if (nutritionData.sodium < 1500) score += 0.5;
     if (nutritionData.fat < 60) score += 0.5;
     
-    // Cap between 1 and 10
-    return Math.max(1, Math.min(10, score));
+    return Math.max(1, Math.min(10, Number(score.toFixed(1))));
   };
 
   // Generate synthetic weekly data for chart
@@ -181,6 +240,14 @@ const Dashboard = () => {
     }));
   };
 
+  // Calculate target protein based on user weight
+  const getTargetProtein = () => {
+    if (user?.weight) {
+      return Math.round(user.weight * (user.goal === 'gain' ? 1.6 : 1.2));
+    }
+    return 75;
+  };
+
   // Stats cards with real data
   const stats = [
     {
@@ -188,29 +255,29 @@ const Dashboard = () => {
       value: dailyStats.calories,
       target: user?.daily_calorie_goal || 2000,
       icon: Activity,
-      color: "purple",
+      color: "indigo",
       unit: "cal",
       percentage: user?.daily_calorie_goal ? 
-        Math.round((dailyStats.calories / user.daily_calorie_goal) * 100) : 0
+        Math.min(100, Math.round((dailyStats.calories / user.daily_calorie_goal) * 100)) : 0
     },
     {
       title: "Protein Intake",
       value: Math.round(dailyStats.protein),
-      target: user?.weight ? Math.round(user.weight * 1.2) : 75,
+      target: getTargetProtein(),
       icon: TrendingUp,
-      color: "green",
+      color: "emerald",
       unit: "g",
-      percentage: user?.weight ? 
-        Math.round((dailyStats.protein / (user.weight * 1.2)) * 100) : 0
+      percentage: getTargetProtein() > 0 ? 
+        Math.min(100, Math.round((dailyStats.protein / getTargetProtein()) * 100)) : 0
     },
     {
       title: "Exercise Minutes",
       value: dailyStats.exerciseMinutes,
       target: 60,
       icon: Clock,
-      color: "indigo",
+      color: "violet",
       unit: "min",
-      percentage: Math.round((dailyStats.exerciseMinutes / 60) * 100)
+      percentage: Math.min(100, Math.round((dailyStats.exerciseMinutes / 60) * 100))
     },
     {
       title: "Water Intake",
@@ -219,27 +286,38 @@ const Dashboard = () => {
       icon: Droplets,
       color: "blue",
       unit: "L",
-      percentage: Math.round((dailyStats.waterIntake / 2.5) * 100)
+      percentage: Math.min(100, Math.round((dailyStats.waterIntake / 2.5) * 100))
     },
   ];
 
   // Process today's foods for display
-  const processedFoods = todayFoods?.foodLogs?.map(food => ({
-    meal: food.mealType,
+  const processedFoods = foodLogs.map(food => ({
+    id: food.id,
+    meal: food.mealType || 'snack',
+    mealType: food.mealType,
     foods: [food.foodName],
-    calories: food.calories,
-    time: format(new Date(food.timestamp), 'h:mm a'),
+    calories: food.calories || 0,
+    time: food.timestamp ? format(new Date(food.timestamp), 'h:mm a') : '',
+    protein: food.protein || 0,
+    carbs: food.carbs || 0,
+    fat: food.fat || 0,
+    fiber: food.fiber || 0,
+    sugar: food.sugar || 0,
+    sodium: food.sodium || 0,
+    foodName: food.foodName,
+    foodGroup: food.foodGroup,
+    servingSize: food.servingSize,
     foodData: food,
   })) || [];
 
-  // FIXED: Process today's exercises for display - handle both response formats
-  const exerciseData = todayExercises?.data ? todayExercises.data : todayExercises;
-  const processedExercises = exerciseData?.exerciseLogs?.map(exercise => ({
+  // Process today's exercises for display
+  const processedExercises = exerciseLogs.map(exercise => ({
+    id: exercise.id,
     name: exercise.exerciseName,
     type: exercise.exerciseType,
-    duration: exercise.duration,
-    calories: exercise.caloriesBurned,
-    time: format(new Date(exercise.timestamp), 'h:mm a'),
+    duration: exercise.duration || 0,
+    calories: exercise.caloriesBurned || 0,
+    time: exercise.timestamp ? format(new Date(exercise.timestamp), 'h:mm a') : '',
   })) || [];
 
   // Create daily summary object for DailySummary component
@@ -247,25 +325,27 @@ const Dashboard = () => {
     totals: {
       calories: dailyStats.calories,
       protein: dailyStats.protein,
-      carbs: todayFoods?.foodLogs?.reduce((acc, food) => acc + (food.carbs || 0), 0) || 0,
-      fat: todayFoods?.foodLogs?.reduce((acc, food) => acc + (food.fat || 0), 0) || 0,
-      fiber: todayFoods?.foodLogs?.reduce((acc, food) => acc + (food.fiber || 0), 0) || 0,
-      sugar: todayFoods?.foodLogs?.reduce((acc, food) => acc + (food.sugar || 0), 0) || 0,
-      sodium: todayFoods?.foodLogs?.reduce((acc, food) => acc + (food.sodium || 0), 0) || 0,
+      carbs: dailyStats.carbs,
+      fat: dailyStats.fat,
+      fiber: dailyStats.fiber,
+      sugar: dailyStats.sugar,
+      sodium: dailyStats.sodium,
     },
     goals: {
       calories: user?.daily_calorie_goal || 2000,
-      protein: user?.weight ? Math.round(user.weight * 1.2) : 75,
+      protein: getTargetProtein(),
       carbs: 275,
       fat: 65,
     },
     percentages: {
-      protein: user?.weight ? 
-        Math.round((dailyStats.protein / (user.weight * 1.2)) * 100) : 0,
-      carbs: Math.round(((todayFoods?.foodLogs?.reduce((acc, food) => acc + (food.carbs || 0), 0) || 0) / 275) * 100),
-      fat: Math.round(((todayFoods?.foodLogs?.reduce((acc, food) => acc + (food.fat || 0), 0) || 0) / 65) * 100),
+      protein: getTargetProtein() > 0 ? 
+        Math.round((dailyStats.protein / getTargetProtein()) * 100) : 0,
+      carbs: Math.round((dailyStats.carbs / 275) * 100) || 0,
+      fat: Math.round((dailyStats.fat / 65) * 100) || 0,
     },
     remainingCalories: Math.max(0, (user?.daily_calorie_goal || 2000) - dailyStats.calories),
+    foodCount: foodLogs.length,
+    exerciseCount: exerciseLogs.length,
   };
 
   const containerVariants = {
@@ -290,6 +370,7 @@ const Dashboard = () => {
 
   // Handle refresh data
   const handleRefresh = () => {
+    console.log("🔄 Manual refresh triggered");
     refetchFoods();
     refetchExercises();
   };
@@ -322,17 +403,17 @@ const Dashboard = () => {
                 Welcome back, {user?.name || "User"}! 👋
               </h2>
               <p className="opacity-90">
-                {user?.goal === "lose" &&
-                  "Keep going! You're on track to reach your weight loss goals."}
-                {user?.goal === "gain" &&
-                  "Great progress! Keep fueling your muscle growth."}
-                {user?.goal === "maintain" &&
-                  "Excellent work maintaining your healthy lifestyle!"}
+                {foodLogs.length > 0 
+                  ? `You've logged ${foodLogs.length} meal${foodLogs.length !== 1 ? 's' : ''} today`
+                  : "Ready to track your nutrition today?"}
               </p>
-              <div className="mt-2 text-sm opacity-80">
-                Daily Goal: {user?.daily_calorie_goal || 2000} calories • 
-                {user?.goal === "lose" ? " Weight Loss" : 
-                 user?.goal === "gain" ? " Weight Gain" : " Maintenance"}
+              <div className="mt-2 text-sm opacity-80 flex flex-wrap gap-2">
+                <span>Daily Goal: {user?.daily_calorie_goal || 2000} calories</span>
+                <span>•</span>
+                <span>
+                  {user?.goal === "lose" ? "Weight Loss" : 
+                   user?.goal === "gain" ? "Weight Gain" : "Maintenance"}
+                </span>
               </div>
             </div>
             <div className="mt-4 md:mt-0 flex flex-col gap-2">
@@ -355,10 +436,6 @@ const Dashboard = () => {
                   </>
                 )}
               </Button>
-              <Button variant="outline-white" size="sm" className="font-semibold">
-                View Weekly Report
-                <ChevronRight className="ml-2 h-5 w-5" />
-              </Button>
             </div>
           </div>
         </Card>
@@ -369,54 +446,116 @@ const Dashboard = () => {
         variants={itemVariants}
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
       >
-        {stats.map((stat, index) => (
-          <motion.div key={stat.title} variants={itemVariants} custom={index}>
-            <Card className="hover:shadow-xl transition-shadow duration-300">
-              <div className="p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <div
-                    className={`p-2 rounded-lg bg-${stat.color}-100 dark:bg-${stat.color}-900/30`}
-                  >
-                    <stat.icon
-                      className={`h-6 w-6 text-${stat.color}-600 dark:text-${stat.color}-400`}
-                    />
-                  </div>
-                  <span className="text-sm font-bold text-gray-500 dark:text-gray-400">
-                    {stat.percentage}%
-                  </span>
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {stat.value} <span className="text-sm">{stat.unit}</span>
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {stat.title}
-                </p>
-                <div className="mt-3">
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                    <div
-                      className={`bg-${stat.color}-500 h-2 rounded-full transition-all duration-500`}
-                      style={{
-                        width: `${Math.min(stat.percentage, 100)}%`,
-                      }}
-                    ></div>
-                  </div>
-                  <div className="flex justify-between mt-1">
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      0 {stat.unit}
+        {stats.map((stat, index) => {
+          // Dynamic color classes
+          const colorMap = {
+            indigo: {
+              bg: 'bg-indigo-100 dark:bg-indigo-900/30',
+              text: 'text-indigo-600 dark:text-indigo-400',
+              bar: 'bg-indigo-500'
+            },
+            emerald: {
+              bg: 'bg-emerald-100 dark:bg-emerald-900/30',
+              text: 'text-emerald-600 dark:text-emerald-400',
+              bar: 'bg-emerald-500'
+            },
+            violet: {
+              bg: 'bg-violet-100 dark:bg-violet-900/30',
+              text: 'text-violet-600 dark:text-violet-400',
+              bar: 'bg-violet-500'
+            },
+            blue: {
+              bg: 'bg-blue-100 dark:bg-blue-900/30',
+              text: 'text-blue-600 dark:text-blue-400',
+              bar: 'bg-blue-500'
+            }
+          };
+          
+          const colors = colorMap[stat.color] || colorMap.indigo;
+          
+          return (
+            <motion.div key={stat.title} variants={itemVariants} custom={index}>
+              <Card className="hover:shadow-xl transition-shadow duration-300">
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className={`p-2 rounded-lg ${colors.bg}`}>
+                      <stat.icon className={`h-6 w-6 ${colors.text}`} />
+                    </div>
+                    <span className="text-sm font-bold text-gray-500 dark:text-gray-400">
+                      {stat.percentage}%
                     </span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">
-                      {stat.target} {stat.unit}
-                    </span>
+                  </div>
+                  <h3 className="text-2xl font-bold text-gray-900 dark:text-white">
+                    {stat.value} <span className="text-sm font-normal">{stat.unit}</span>
+                  </h3>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    {stat.title}
+                  </p>
+                  <div className="mt-3">
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div
+                        className={`${colors.bar} h-2 rounded-full transition-all duration-500`}
+                        style={{
+                          width: `${stat.percentage}%`,
+                        }}
+                      ></div>
+                    </div>
+                    <div className="flex justify-between mt-1">
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        0
+                      </span>
+                      <span className="text-xs text-gray-500 dark:text-gray-400">
+                        {stat.target} {stat.unit}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </Card>
-          </motion.div>
-        ))}
+              </Card>
+            </motion.div>
+          );
+        })}
       </motion.div>
 
-      {/* Debug Info */}
-     
+      {/* Debug Info - REMOVE IN PRODUCTION */}
+      {process.env.NODE_ENV === 'development' && (
+        <Card className="p-4 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+          <details>
+            <summary className="text-sm font-medium text-gray-700 dark:text-gray-300 cursor-pointer">
+              Debug Info (Click to expand)
+            </summary>
+            <div className="mt-4 space-y-2 text-xs">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="font-semibold text-gray-900 dark:text-white">Food Logs:</p>
+                  <pre className="mt-1 p-2 bg-gray-100 dark:bg-gray-900 rounded overflow-auto max-h-40">
+                    {JSON.stringify(foodLogs, null, 2)}
+                  </pre>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900 dark:text-white">Exercise Logs:</p>
+                  <pre className="mt-1 p-2 bg-gray-100 dark:bg-gray-900 rounded overflow-auto max-h-40">
+                    {JSON.stringify(exerciseLogs, null, 2)}
+                  </pre>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="font-semibold text-gray-900 dark:text-white">Daily Stats:</p>
+                  <pre className="mt-1 p-2 bg-gray-100 dark:bg-gray-900 rounded overflow-auto">
+                    {JSON.stringify(dailyStats, null, 2)}
+                  </pre>
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900 dark:text-white">Daily Summary:</p>
+                  <pre className="mt-1 p-2 bg-gray-100 dark:bg-gray-900 rounded overflow-auto">
+                    {JSON.stringify(dailySummary, null, 2)}
+                  </pre>
+                </div>
+              </div>
+            </div>
+          </details>
+        </Card>
+      )}
 
       {/* Main Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -449,7 +588,7 @@ const Dashboard = () => {
                 </h3>
                 <div className="flex items-center space-x-2">
                   <span className="text-sm text-gray-600 dark:text-gray-400">
-                    {processedFoods.length} items • {dailyStats.calories} cal
+                    {foodLogs.length} item{foodLogs.length !== 1 ? 's' : ''} • {dailyStats.calories} cal
                   </span>
                   <Button 
                     variant="outline" 
@@ -460,15 +599,19 @@ const Dashboard = () => {
                   </Button>
                 </div>
               </div>
-              {processedFoods.length > 0 ? (
+              {foodLogs.length > 0 ? (
                 <div className="space-y-4">
                   {processedFoods.map((food, index) => (
                     <FoodLogCard
-                      key={index}
+                      key={food.id || index}
                       meal={food.meal}
                       foods={food.foods}
                       calories={food.calories}
                       time={food.time}
+                      protein={food.protein}
+                      carbs={food.carbs}
+                      fat={food.fat}
+                      foodName={food.foodName}
                       foodData={food.foodData}
                     />
                   ))}
@@ -481,10 +624,10 @@ const Dashboard = () => {
                   <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                     No meals logged today
                   </h4>
-                  <p className="text-gray-600 dark:text-gray-400">
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
                     Start tracking your nutrition by adding your first meal
                   </p>
-                  <Button className="mt-4" onClick={() => window.location.href = '/food-log'}>
+                  <Button onClick={() => window.location.href = '/food-log'}>
                     Log Your First Meal
                   </Button>
                 </div>
@@ -497,15 +640,21 @@ const Dashboard = () => {
         <div className="space-y-6">
           {/* Health Score */}
           <motion.div variants={itemVariants}>
-            <HealthScore score={healthScore} />
+            <HealthScore 
+              score={healthScore} 
+              hasData={foodLogs.length > 0}
+            />
           </motion.div>
 
           {/* Daily Summary */}
           <motion.div variants={itemVariants}>
-            <DailySummary data={dailySummary} />
+            <DailySummary 
+              data={dailySummary} 
+              hasData={foodLogs.length > 0}
+            />
           </motion.div>
 
-          {/* Exercise Today - FIXED: Updated to use processedExercises */}
+          {/* Exercise Today */}
           <motion.div variants={itemVariants}>
             <Card className="p-6">
               <div className="flex items-center justify-between mb-6">
@@ -514,15 +663,22 @@ const Dashboard = () => {
                 </h3>
                 <div className="flex items-center space-x-2">
                   <span className="text-sm text-gray-600 dark:text-gray-400">
-                    {processedExercises.length} activities • {dailyStats.exerciseMinutes} min
+                    {exerciseLogs.length} activit{exerciseLogs.length !== 1 ? 'ies' : 'y'} • {dailyStats.exerciseMinutes} min
                   </span>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => window.location.href = '/exercise'}
+                  >
+                    View All
+                  </Button>
                 </div>
               </div>
-              {processedExercises.length > 0 ? (
+              {exerciseLogs.length > 0 ? (
                 <div className="space-y-4">
                   {processedExercises.map((exercise, index) => (
                     <ExerciseCard
-                      key={index}
+                      key={exercise.id || index}
                       name={exercise.name}
                       type={exercise.type}
                       duration={exercise.duration}
@@ -539,10 +695,10 @@ const Dashboard = () => {
                   <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                     No exercises logged today
                   </h4>
-                  <p className="text-gray-600 dark:text-gray-400">
+                  <p className="text-gray-600 dark:text-gray-400 mb-4">
                     Start tracking your workouts
                   </p>
-                  <Button className="mt-4" onClick={() => window.location.href = '/exercise'}>
+                  <Button onClick={() => window.location.href = '/exercise'}>
                     Log Exercise
                   </Button>
                 </div>

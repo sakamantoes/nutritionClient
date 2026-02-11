@@ -18,7 +18,7 @@ export default defineConfig({
       ],
       manifest: {
         name: 'Nutrition Tracker',
-        short_name: 'NutriTrack',
+        short_name: 'NutriHive',
         description: 'AI-powered nutrition tracking and meal planning app',
         theme_color: '#0ea5e9',
         background_color: '#ffffff',

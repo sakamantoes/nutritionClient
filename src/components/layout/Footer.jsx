@@ -65,7 +65,7 @@ const Footer = () => {
                 </div>
                 <div>
                   <h3 className="text-xl font-bold gradient-text">
-                    NutriTrack
+                    NutriHive
                   </h3>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     AI-powered nutrition tracking
@@ -151,7 +151,7 @@ const Footer = () => {
       <div className="bg-gradient-to-r from-primary-500 to-secondary-500 text-white py-3 px-4 text-center">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between space-y-2 sm:space-y-0">
           <p className="text-sm">
-            <span className="font-semibold">✨ Install NutriTrack App</span> - Get instant access from your home screen
+            <span className="font-semibold">✨ Install NutriHive App</span> - Get instant access from your home screen
           </p>
           <button
             onClick={() => {
