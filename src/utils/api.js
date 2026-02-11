@@ -2,7 +2,7 @@
 import axios from "axios";
 import toast from "react-hot-toast";
 
-const API_BASE_URL = "http://localhost:3000/api";
+const API_BASE_URL = "https://nutritionbackend-murex.vercel.app/api";
 const PYTHON_API_URL = "http://localhost:5000/api";
 
 // Node.js API instance
