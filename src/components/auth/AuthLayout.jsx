@@ -5,7 +5,7 @@ import { Activity, Brain, Heart } from 'lucide-react';
 
 const AuthLayout = ({ children, title, subtitle }) => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 dark:from-gray-900 dark:to-gray-800">
+    <div className="min-h-screen">
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <motion.header
@@ -14,8 +14,8 @@ const AuthLayout = ({ children, title, subtitle }) => {
           className="flex items-center justify-between mb-12"
         >
           <Link to="/" className="flex items-center space-x-2">
-            <div className="h-10 w-10 rounded-xl bg-gradient-primary flex items-center justify-center">
-              <Activity className="h-6 w-6 text-indigo-600" />
+            <div className="h-10 w-10 rounded-full overflow-hidden bg-gradient-primary flex items-center justify-center">
+              <img src="/image/icon.png" alt="" />
             </div>
             <span className="text-2xl font-bold gradient-text">NutriHive</span>
           </Link>

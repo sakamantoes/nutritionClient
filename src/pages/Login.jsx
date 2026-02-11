@@ -21,7 +21,7 @@ const Login = () => {
         <h4 className="text-sm font-semibold text-primary-800 dark:text-primary-300 mb-2">
           💡 Pro Tip
         </h4>
-        <p className="text-xs text-primary-700 dark:text-primary-400">
+        <p className="text-xs text-white dark:text-white">
           Use the demo account to explore all features instantly. No registration required!
         </p>
       </motion.div>

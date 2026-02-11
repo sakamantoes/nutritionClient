@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { useQuery } from 'react-query';
+import { NavLink, useNavigate } from 'react-router-dom'; // ← import useNavigate
 import {
   Home,
   Utensils,
@@ -14,28 +13,14 @@ import {
   LogOut
 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
-import { authApi } from '../../utils/api';
-import { format } from 'date-fns';
 
 const Sidebar = () => {
   const { logout, user } = useAuth();
-  const navigate = useNavigate();
-
-  // Fetch real-time daily summary for user stats
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const { data: dailySummary, isLoading } = useQuery(
-    ['dailySummary', user?.id, today],
-    () => authApi.getDailySummary(user?.id, today),
-    {
-      enabled: !!user?.id,
-      refetchInterval: 30000, // Refetch every 30 seconds for real-time updates
-      refetchOnWindowFocus: true,
-    }
-  );
+  const navigate = useNavigate(); // ← initialize navigate
 
   const handleLogout = () => {
-    logout();
-    navigate('/login');
+    logout();               // Call your auth logout
+    navigate('/login');     // Redirect to login page
   };
 
   const navItems = [
@@ -65,26 +50,18 @@ const Sidebar = () => {
     visible: { opacity: 1, x: 0 },
   };
 
-  // Calculate real-time stats
-  const currentCalories = dailySummary?.totals?.calories || 0;
-  const calorieGoal = user?.daily_calorie_goal || 2000;
-  const caloriePercentage = calorieGoal > 0 
-    ? Math.min(Math.round((currentCalories / calorieGoal) * 100), 100) 
-    : 0;
-  const remainingCalories = Math.max(0, calorieGoal - currentCalories);
-
   return (
     <motion.aside
       initial="hidden"
       animate="visible"
       variants={containerVariants}
-      className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen fixed left-0 top-0"
+      className="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col h-screen"
     >
       {/* Logo */}
       <div className="p-6 border-b border-gray-200 dark:border-gray-700">
         <div className="flex items-center space-x-3">
           <div className="h-10 w-10 rounded-full overflow-hidden flex items-center justify-center">
-            <img src="/image/icon.png" alt="NutriHive Logo" />
+          <img src="/image/icon.png" alt="" />
           </div>
           <div>
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
@@ -126,7 +103,7 @@ const Sidebar = () => {
       <div className="p-4 border-t border-gray-200 dark:border-gray-700">
         <motion.button
           variants={itemVariants}
-          onClick={handleLogout}
+          onClick={handleLogout} // ← updated
           className="flex items-center justify-center w-full px-4 py-3 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all duration-200"
         >
           <LogOut className="h-5 w-5 mr-2" />
