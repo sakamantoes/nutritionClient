@@ -1,23 +1,21 @@
 // src/components/dashboard/FoodLogCard.jsx
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Clock, Flame, Edit2, Trash2, Apple, Coffee, Sandwich, Utensils } from 'lucide-react';
-import { format } from 'date-fns';
+import { Clock, Flame, Edit2, Trash2, Coffee, Sandwich, Utensils, Apple } from 'lucide-react';
 
-const FoodLogCard = ({ meal, foods, calories, time, foodData, onEdit, onDelete }) => {
-  const getMealIcon = (mealType) => {
-    switch (mealType?.toLowerCase()) {
-      case 'breakfast':
-        return Coffee;
-      case 'lunch':
-        return Sandwich;
-      case 'dinner':
-        return Utensils;
-      default:
-        return Apple;
-    }
-  };
-
+const FoodLogCard = ({ 
+  meal, 
+  foods, 
+  calories, 
+  time, 
+  protein, 
+  carbs, 
+  fat,
+  foodName,
+  foodData,
+  onEdit, 
+  onDelete 
+}) => {
   const getMealColor = (mealType) => {
     switch (mealType?.toLowerCase()) {
       case 'breakfast':
@@ -31,19 +29,30 @@ const FoodLogCard = ({ meal, foods, calories, time, foodData, onEdit, onDelete }
     }
   };
 
-  const MealIcon = getMealIcon(meal);
+  const getMealIcon = (mealType) => {
+    switch (mealType?.toLowerCase()) {
+      case 'breakfast':
+        return <Coffee className="h-4 w-4" />;
+      case 'lunch':
+        return <Sandwich className="h-4 w-4" />;
+      case 'dinner':
+        return <Utensils className="h-4 w-4" />;
+      default:
+        return <Apple className="h-4 w-4" />;
+    }
+  };
 
   return (
     <motion.div
       whileHover={{ scale: 1.01 }}
-      className="bg-green-200 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow duration-200"
+      className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4 hover:shadow-md transition-shadow duration-200"
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <div className="flex items-center space-x-3 mb-2">
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${getMealColor(meal)}`}>
-              <MealIcon className="h-3 w-3 inline mr-1" />
-              {meal}
+            <span className={`flex items-center space-x-1 px-2.5 py-1 rounded-full text-xs font-medium ${getMealColor(meal)}`}>
+              {getMealIcon(meal)}
+              <span>{meal || 'Snack'}</span>
             </span>
             <div className="flex items-center text-sm text-gray-500 dark:text-gray-400">
               <Clock className="h-3 w-3 mr-1" />
@@ -55,21 +64,17 @@ const FoodLogCard = ({ meal, foods, calories, time, foodData, onEdit, onDelete }
             </div>
           </div>
           
-          <div className="space-y-2">
-            {foods.map((food, index) => (
-              <div key={index} className="flex items-center justify-between">
-                <p className="text-sm text-gray-700 dark:text-gray-300">
-                  • {food}
-                </p>
-                {foodData && (
-                  <div className="flex items-center space-x-2 text-xs text-gray-500 dark:text-gray-400">
-                    {foodData.protein && <span>{foodData.protein}g protein</span>}
-                    {foodData.carbs && <span>• {foodData.carbs}g carbs</span>}
-                    {foodData.fat && <span>• {foodData.fat}g fat</span>}
-                  </div>
-                )}
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-gray-900 dark:text-white">
+              {foodName || foods?.[0] || 'Unknown Food'}
+            </p>
+            {(protein || carbs || fat) && (
+              <div className="flex items-center space-x-3 text-xs text-gray-500 dark:text-gray-400">
+                {protein > 0 && <span>P: {Math.round(protein)}g</span>}
+                {carbs > 0 && <span>C: {Math.round(carbs)}g</span>}
+                {fat > 0 && <span>F: {Math.round(fat)}g</span>}
               </div>
-            ))}
+            )}
           </div>
         </div>
         
